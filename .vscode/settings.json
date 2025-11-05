@@ -1,0 +1,8 @@
+{
+    "solarizedCustomTheme.accentColor": "Green",
+    "python.testing.pytestArgs": [
+        "Type_game"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

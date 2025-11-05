@@ -1,0 +1,149 @@
+@startuml
+' Définition des classes avec leurs attributs et méthodes
+
+class Action {
+    - name: str
+    - value: float
+    ---
+    + __init__(name: str = None, value: float = None)
+    + __repr__(): str
+    + create_action_from_string(action_str: str): Action
+    - _normalize_string(s: str): str
+}
+
+class Bouton {
+    - action: str
+    - value: float
+    ---
+    + __init__(action: str = None, value: float = None)
+    + string_to_bouton(button_string: str): Bouton or None
+    + __repr__(): str
+}
+
+class Controller {
+    - count: int
+    - running: bool
+    - game_stat: dict
+    - game: Game
+    - scan: ScanTable
+    ---
+    + __init__()
+    + main(): str
+    - game_stat_to_string(message: str = ""): str
+    + draw()
+}
+
+class Game {
+    - data: any
+    - etat: dict
+    - resultat_calcul: dict
+    ---
+    + __init__()
+    + scan_to_data_table(scan_table: dict)
+    + decision(table_scan: dict): dict or None
+    - _refresh(table_scan: dict)
+    - _calcul()
+    - _calucul_EV(chance_win: float, mise: float): float
+    - _nbr_player(table_scan: dict): int
+    - _choix(): list
+    - _choix_action_to_bouton(table_scan: dict): str or None
+}
+
+class Party {
+    - opponents: dict[str, Players]
+    - me: Players
+    - pot: float
+    - current_phase: str
+    ---
+    + __init__()
+    + refresh(table: dict)
+    + active_days_at_start(): int
+    + active_player_count(): int
+    + game_phase(table: dict): str
+}
+
+class Players {
+    - active_days_at_start: bool
+    - fond: float
+    - fond_start: float
+    - active_player: bool
+    - money_relance: float
+    - money_paid: float
+    ---
+    + __init__()
+    + refresh(fond: float)
+}
+
+class ScanTable {
+    - reader: OCR
+    - screen_old: Image
+    - screen_array: np.array
+    - timer_screen: Timer
+    - reference_point: tuple
+    - table: dict
+    - scan_string: str
+    - screen_reference: np.array
+    ---
+    + __init__()
+    + scan(debug: bool = False): bool
+    + reset_table()
+    + screen_refresh(): Image
+    + find_table(): tuple or None
+    + get_image_chunk(coord_relatif: list): np.array
+    + scan_point_white(coordonnees: list = [0, 0]): bool
+    + scan_to_string(): str
+    - coord_abs(coord_relatif: list): list
+    - calculate_absolute_coordinates()
+    + show_debug_image()
+}
+
+class OCR {
+    - debug_img: np.array
+    - ocr_vide: Image
+    - symbol_images: dict
+    - debug_templates: dict
+    - somme_time_lock: threading.Lock
+    ---
+    + __init__()
+    + ocr_table(table: dict, screen_image: Image, max_workers: int = 12, debug: bool = False): dict
+    - test_card(x: int, y: int, screen_image: Image): bool
+    - scan_point_white(coordonnees: tuple, screen_image: Image): bool
+    - ocr_region(region_image: Image, custom_config: str): str or None
+    - _match_template(screen_gray: np.array, template: np.array): float
+    + reader_symbol(image: Image): str
+    + show_bug()
+    + show_ocr_empty()
+}
+
+class Timer {
+    - start_time: float
+    - time_wait: float
+    ---
+    + __init__(time_wait: float)
+    + is_expire(): bool
+    + is_running(): bool
+    + refresh(time_wait: float = 0)
+}
+
+class View {
+    ---
+    + __init__()
+}
+
+' Définition des relations entre les classes
+
+Controller "1" o-- "1" Game : utilise
+Controller "1" o-- "1" ScanTable : utilise
+
+Game "1" ..> "0..1" Party : peut utiliser
+Game "1" ..> "0..*" Bouton : peut utiliser
+
+Party "1" *-- "5" Players : contient
+
+ScanTable "1" o-- "1" OCR : utilise
+ScanTable "1" o-- "1" Timer : utilise
+
+Bouton "1" ..> "1" Action : utilise
+Action <|-- Bouton : hérite (si applicable)
+
+@enduml

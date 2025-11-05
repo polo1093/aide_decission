@@ -1,0 +1,21 @@
+# Default ignored files
+/screen/erreur/
+*.avi
+/poker/
+
+# Ignore Python bytecode and cache directories
+__pycache__/
+*.pyc
+*.pyo
+*$py.class
+
+# Ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+/Screen/
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+EOF

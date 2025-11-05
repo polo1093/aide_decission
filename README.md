@@ -1,0 +1,78 @@
+# Bot Poker
+
+Ce projet est un prototype de bot pour table de poker en ligne. Il capture l'écran, détecte les cartes et les boutons grâce à l'OCR puis évalue les chances de victoire pour choisir automatiquement l'action à jouer.
+
+## Principales fonctionnalités
+
+- **Capture et analyse de l'écran** : le module `objet.scan` identifie les cartes du board et les mises via `pytesseract`.
+- **Modélisation de la partie** : `objet.game` calcule les probabilités de gain avec `pokereval` et détermine l'action optimale.
+- **Automatisation des clics** : `objet.cliqueur` simule les clics sur l'interface pour miser ou se coucher.
+- **Interface de test** : `test.py` lance une petite fenêtre PySimpleGUI permettant d'activer le scan et d'afficher les informations récupérées.
+
+Les positions des différents éléments à l'écran sont maintenant stockées dans `coordinates.json` et les images de référence sont dans le dossier `screen`.
+
+## Installation
+
+1. Cloner le dépôt.
+2. Installer Python 3.9 ou version supérieure.
+3. Installer les dépendances :
+
+```bash
+pip install -r requirements.txt
+```
+
+Assurez‑vous que Tesseract est installé sur votre système pour que l'OCR fonctionne correctement.
+Si l'exécutable n'est pas détecté automatiquement, définissez la variable
+d'environnement `TESSERACT_CMD` avec le chemin complet vers `tesseract` :
+
+```bash
+export TESSERACT_CMD=/usr/bin/tesseract
+```
+
+## Utilisation
+
+Lancer l'interface de démonstration :
+
+```bash
+python test.py
+```
+
+Une fenêtre permet de lancer le scan de la table. Les informations détectées s'affichent en temps réel et le bot peut cliquer sur l'action proposée.
+
+## Modifier les coordonnées
+
+Toutes les positions à l'écran sont définies dans le fichier `coordinates.json` à la racine du projet. Chaque entrée contient les coordonnées relatives d'une région sous la forme `[x1, y1, x2, y2]`. Modifiez ces valeurs pour adapter le bot à une nouvelle résolution ou interface, puis relancez le programme pour appliquer les changements.
+
+## Capture de nouvelles cartes
+
+Le script `scripts/capture_cards.py` aide à constituer un jeu d'images pour l'OCR.
+Spécifiez les noms de régions définis dans `coordinates.json` ou des coordonnées
+absolues pour découper la valeur et le symbole d'une carte :
+
+```bash
+python scripts/capture_cards.py \
+    --number player_card_1_number \
+    --symbol player_card_1_symbol \
+    --ref 1000,200
+```
+
+Si le test automatique détecte au moins dix pixels blancs en bas à droite, le
+programme demande la valeur et la couleur de la carte. Les images sont alors
+enregistrées dans `screen/debug/Carte/<valeur>/` et `screen/symbole/<couleur>/`.
+
+## Copier les sources Python
+
+Le script `scripts/copy_python_sources.py` regroupe tout le code `.py`
+du projet (à l'exception de ce script) et le place dans le presse-papiers.
+Installez `pyperclip` si nécessaire, puis exécutez :
+
+```bash
+python scripts/copy_python_sources.py
+```
+
+Vous pouvez ignorer d'autres fichiers avec `--exclude chemin/vers/fichier.py`.
+
+## Avertissement
+
+Ce projet est fourni à titre expérimental. L'utilisation d'un bot sur des plateformes de poker en ligne peut être interdite par leurs conditions d'utilisation. L'auteur décline toute responsabilité en cas d'usage inapproprié.
+
