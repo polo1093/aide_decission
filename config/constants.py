@@ -15,18 +15,38 @@ TIMER_SCAN_REFRESH = 0.5
 # Chemin vers le fichier de configuration des coordonnées
 import json
 import os
+from typing import Dict, Tuple
 
 COORDINATES_FILE = os.path.join(os.path.dirname(__file__), "coordinates.json")
 
 
-def load_coordinates(path=COORDINATES_FILE):
-    """Load coordinates configuration from ``path``.
+def load_configuration(path: str = COORDINATES_FILE) -> Tuple[Dict[str, Dict[str, object]], Dict[str, object]]:
+    """Charge la configuration complète et renvoie les régions et le crop."""
 
-    Returns a dictionary mapping region names to their coordinate info.
-    """
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    regions = data.get("regions", {})
+    capture = data.get("table_capture", {}) or {}
+    if "enabled" not in capture:
+        capture["enabled"] = False
+
+    return regions, capture
+
+
+def load_coordinates(path: str = COORDINATES_FILE) -> Dict[str, Dict[str, object]]:
+    """Renvoie la configuration des zones (coordonnées relatives)."""
+
+    regions, _ = load_configuration(path)
+    return regions
+
+
+def load_table_capture(path: str = COORDINATES_FILE) -> Dict[str, object]:
+    """Renvoie la configuration du crop de la table."""
+
+    _, capture = load_configuration(path)
+    return capture
 
 
 # Dictionnaire des régions (chargé depuis ``coordinates.json``)
-TABLE = load_coordinates()
+TABLE, TABLE_CAPTURE = load_configuration()
