@@ -24,6 +24,7 @@ class ScanTable():
         self.timer_screen = timer.Timer(TIMER_SCAN_REFRESH)
         self.reference_point=None
         self.table = constants.load_coordinates()
+        self.capture_settings = constants.load_table_capture()
         self.scan_string = "don t find"
         self.screen_reference = cv2.imread('screen/launch/me.png', 0)
         self.screen_pre_tour = cv2.imread('screen/launch/test_pre_tour.png', 0)
@@ -34,9 +35,10 @@ class ScanTable():
         self.screen_refresh()
         self.reset_table()
         if self.find_table() and self.test_pre_tour:
+            self.apply_table_crop()
             self.calculate_absolute_coordinates()
             self.table = self.reader.ocr_table(self.table, self.screen_old,debug=debug)
-            
+
             return True
         self.scan_string = "don't find"
         return False
@@ -108,6 +110,36 @@ class ScanTable():
         for region_name, region_info in self.table.items():
             coord_rel = region_info['coord_rel']
             self.table[region_name]['coord_abs'] = self.coord_abs(coord_rel)
+
+    def apply_table_crop(self):
+        if not self.capture_settings or not self.capture_settings.get('enabled'):
+            return
+        if self.reference_point is None:
+            return
+
+        bounds_rel = self.capture_settings.get('relative_bounds')
+        if not bounds_rel or len(bounds_rel) != 4:
+            return
+
+        left, top, right, bottom = self.coord_abs(bounds_rel)
+        width, height = self.screen_old.size
+
+        left = max(0, min(width, left))
+        right = max(0, min(width, right))
+        top = max(0, min(height, top))
+        bottom = max(0, min(height, bottom))
+
+        if right <= left or bottom <= top:
+            logging.warning("Table crop invalid after clamping: %s", (left, top, right, bottom))
+            return
+
+        crop_box = (int(left), int(top), int(right), int(bottom))
+        self.screen_old = self.screen_old.crop(crop_box)
+        self.screen_array = np.array(self.screen_old)
+        self.reference_point = (
+            self.reference_point[0] - crop_box[0],
+            self.reference_point[1] - crop_box[1]
+        )
 
     def show_debug_image(self):
         """Affiche l'image de débogage avec les rectangles rouges et les noms des régions."""
