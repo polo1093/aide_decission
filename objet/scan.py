@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import PIL
 import logging
+from typing import Dict, Tuple
 from PIL import ImageGrab, Image, ImageDraw, ImageFont
 import pyautogui
 
@@ -140,6 +141,73 @@ class ScanTable():
             self.reference_point[0] - crop_box[0],
             self.reference_point[1] - crop_box[1]
         )
+
+    @staticmethod
+    def infer_capture_settings_from_images(
+        screenshot: Image.Image,
+        expected_crop: Image.Image,
+        reference_image: Image.Image,
+        *,
+        tolerance: int = 1,
+    ) -> Tuple[Dict[str, object], Tuple[int, int]]:
+        """Infer capture settings and reference point from sample images.
+
+        Args:
+            screenshot: Raw screenshot containing the full table.
+            expected_crop: Expected cropped region extracted from the screenshot.
+            reference_image: Template image used to determine the reference point.
+            tolerance: Maximum per-channel pixel deviation tolerated between the
+                expected crop and the crop produced by the inferred settings.
+
+        Returns:
+            A tuple of ``(capture_settings, reference_point)`` where
+            ``capture_settings`` mirrors the structure consumed by
+            :meth:`apply_table_crop` and ``reference_point`` corresponds to the
+            top-left pixel returned by template matching of ``reference_image``.
+
+        Raises:
+            ValueError: If the inferred crop does not match the expected image
+                within the provided tolerance.
+        """
+
+        screenshot_rgb = screenshot.convert("RGB")
+        expected_rgb = expected_crop.convert("RGB")
+        reference_rgb = reference_image.convert("RGB")
+
+        screenshot_gray = cv2.cvtColor(np.array(screenshot_rgb), cv2.COLOR_RGB2GRAY)
+        reference_gray = cv2.cvtColor(np.array(reference_rgb), cv2.COLOR_RGB2GRAY)
+        expected_gray = cv2.cvtColor(np.array(expected_rgb), cv2.COLOR_RGB2GRAY)
+
+        ref_result = cv2.matchTemplate(screenshot_gray, reference_gray, cv2.TM_CCOEFF_NORMED)
+        _, _, _, ref_loc = cv2.minMaxLoc(ref_result)
+
+        crop_result = cv2.matchTemplate(screenshot_gray, expected_gray, cv2.TM_CCOEFF_NORMED)
+        _, _, _, crop_loc = cv2.minMaxLoc(crop_result)
+
+        crop_left, crop_top = crop_loc
+        crop_right = crop_left + expected_rgb.width
+        crop_bottom = crop_top + expected_rgb.height
+
+        inferred_reference = (int(ref_loc[0]), int(ref_loc[1]))
+
+        relative_bounds = [
+            crop_left - inferred_reference[0],
+            crop_top - inferred_reference[1],
+            crop_right - inferred_reference[0],
+            crop_bottom - inferred_reference[1],
+        ]
+
+        verification_crop = screenshot_rgb.crop((crop_left, crop_top, crop_right, crop_bottom))
+        diff = np.abs(np.array(verification_crop, dtype=np.int16) - np.array(expected_rgb, dtype=np.int16))
+        if diff.size and int(diff.max()) > tolerance:
+            raise ValueError("Inferred crop does not match expected image within tolerance")
+
+        capture_settings = {
+            "enabled": True,
+            "relative_bounds": [int(round(v)) for v in relative_bounds],
+        }
+
+        return capture_settings, inferred_reference
 
     def show_debug_image(self):
         """Affiche l'image de débogage avec les rectangles rouges et les noms des régions."""

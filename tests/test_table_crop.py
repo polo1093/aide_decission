@@ -175,7 +175,7 @@ def test_apply_table_crop_matches_expected():
         "test_crop_result.png",
         ["ScreenTestUnitaire", "screen/test_unitaire", "screen"]
     )
-    _locate_asset(
+    reference_path = _locate_asset(
         "me.png",
         [
             "ScreenTestUnitaire",
@@ -187,11 +187,17 @@ def test_apply_table_crop_matches_expected():
 
     screenshot = _load_image(screenshot_path)
     expected = _load_image(expected_path)
+    reference = _load_image(reference_path)
 
     scan = ScanTable.__new__(ScanTable)
-    scan.capture_settings = {"enabled": True, "relative_bounds": [-20, -10, 90, 60]}
+    capture_settings, reference_point = ScanTable.infer_capture_settings_from_images(
+        screenshot,
+        expected,
+        reference
+    )
+    scan.capture_settings = capture_settings
     scan.table = {}
-    scan.reference_point = (60, 80)
+    scan.reference_point = reference_point
     scan.screen_old = screenshot.copy()
     scan.screen_array = None
 
@@ -203,3 +209,4 @@ def test_apply_table_crop_matches_expected():
     assert result.size == expected_rgb.size
     assert result.tobytes() == expected_rgb.tobytes()
     assert scan.reference_point == (20, 10)
+    assert scan.capture_settings["relative_bounds"] == [-20, -10, 90, 60]
