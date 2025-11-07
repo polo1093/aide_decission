@@ -1,7 +1,18 @@
-# Default ignored files
+# Project-specific ignores
 /screen/erreur/
-*.avi
 /poker/
+
+# Media files that are too large for the repository
+*.avi
+*.mp4
+*.mov
+*.mkv
+*.webm
+
+# Screen directory: keep TestUnitaire but ignore heavy outputs
+/Screen/*
+!/Screen/TestUnitaire/
+!/Screen/TestUnitaire/**
 
 # Ignore Python bytecode and cache directories
 __pycache__/
@@ -12,10 +23,5 @@ __pycache__/
 # Ignore Jupyter notebook checkpoints
 .ipynb_checkpoints/
 
-/Screen/
-*.mp4
-*.mov
-*.mkv
-*.avi
-*.webm
-EOF
+# Editor configuration directories
+.vscode/
