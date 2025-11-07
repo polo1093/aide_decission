@@ -15,6 +15,12 @@
 !/Screen/TestUnitaire/**
 !/Screen/launch/
 !/Screen/launch/**
+# Lowercase screen directory: keep test assets but ignore others
+/screen/*
+!/screen/test_unitaire/
+!/screen/test_unitaire/**
+!/screen/launch/
+!/screen/launch/**
 # Ignore Python bytecode and cache directories
 __pycache__/
 *.pyc
@@ -26,3 +32,16 @@ __pycache__/
 
 # Editor configuration directories
 .vscode/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python caches and test artifacts
+.pytest_cache/
+.mypy_cache/
+.coverage
+.cache/
+build/
+dist/
