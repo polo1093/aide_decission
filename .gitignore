@@ -13,7 +13,8 @@
 /Screen/*
 !/Screen/TestUnitaire/
 !/Screen/TestUnitaire/**
-
+!/Screen/launch/
+!/Screen/launch/**
 # Ignore Python bytecode and cache directories
 __pycache__/
 *.pyc
