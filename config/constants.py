@@ -17,7 +17,13 @@ import json
 import os
 from typing import Dict, Tuple
 
-COORDINATES_FILE = os.path.join(os.path.dirname(__file__), "coordinates.json")
+# Allow overriding the configuration file to support multi-game setups.
+# If the environment variable GAME_CONFIG_FILE is set, use it; otherwise
+# fall back to the default coordinates.json shipped with the repo.
+COORDINATES_FILE = os.environ.get(
+    "GAME_CONFIG_FILE",
+    os.path.join(os.path.dirname(__file__), "coordinates.json"),
+)
 
 
 def load_configuration(path: str = COORDINATES_FILE) -> Tuple[Dict[str, Dict[str, object]], Dict[str, object]]:

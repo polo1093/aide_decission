@@ -1,19 +1,61 @@
 # aide de décision
 
-To DO list
+To DO list: 
 
+Étape 1 : Recadrage du plateau de jeu et configuration initiale
 
-1.a partir d'un scren d'écran + un image jepg + une image de réferance me.png déterminer les coordonnées à reporter dans le json pr crop l'image
-2.a partir de l'image crop position les zones de captures dans une interface détier avec des contraintes commes les cartes du joeurs on la même taille et même de symbole à regarder donc endroit où il y a la carte le numéro et la couleur (symbole) 
-            et ca doit être lier entre eux si je modifier une carte ca modifier pour l'autre aussi, le tout affin d'enregistrer dans le json
-3.
+Définir une structure de configuration (fichier JSON par jeu, ex: jeu1.json) pour stocker les coordonnées des zones du jeu (plateau, emplacements des cartes, etc.).
 
+Capturer un screenshot de la fenêtre du jeu (nommé par exemple jeu1.png pour le jeu en cours).
 
+Déterminer manuellement la zone du plateau sur le screenshot (la portion de l’image correspondant à la table de jeu, sans les bordures/fenêtres du système).
 
+Enregistrer les coordonnées de recadrage de la table dans le JSON de configuration du jeu (pour pouvoir cropper l’image du jeu à l’avenir).
 
+Prévoir l’extensibilité multi-jeux : s’assurer que la structure JSON et le code pourront gérer facilement d’autres jeux (noms de fichiers/config différents).
 
+    Tests: Écrire des tests unitaires pour valider le recadrage : par exemple, vérifier qu’en fournissant une image d’écran et des coordonnées de découpe, le programme obtient bien l’image recadrée attendue.
 
-Ce projet est un prototype de bot pour table de poker en ligne. Il capture l'écran, détecte les cartes et les boutons grâce à l'OCR puis évalue les chances de victoire pour choisir automatiquement l'action à jouer.
+Étape 2 : Outil interactif d’ajustement des zones de cartes
+
+Développer un script Python d’étalonnage qui affiche le screenshot recadré du plateau et permet de placer/déplacer des rectangles représentant les zones importantes (emplacements de cartes, etc.).
+
+Positionner les zones des cartes : ajouter des rectangles ajustables pour chaque carte sur la table (ex: les 5 cartes communes au centre pour le poker, les cartes des joueurs, etc.).
+
+Configurer les sous-zones des cartes : pour chaque emplacement de carte, définir également les zones du numéro (valeur) et du symbole (suit) sur la carte. Ces sous-zones pourront être définies pour une carte type et reproduites sur les autres si la disposition est identique.
+
+Gestion des groupes de zones : implémenter une logique pour lier certains rectangles entre eux. Par exemple, les 5 zones de cartes du centre doivent garder la même taille et un espacement constant – ajuster un rectangle doit redimensionner/déplacer les autres en conséquence (afin de conserver un alignement régulier).
+
+Ajustement de l’espacement : permettre de modifier l’écart entre les cartes groupées (p. ex. en déplaçant une carte tout en maintenant une touche pour ajuster uniformément l’espace entre toutes).
+
+Interface utilisateur : permettre de valider une fois le placement terminé (par ex. bouton ou touche pour sauvegarder). Le programme doit alors enregistrer toutes les coordonnées calibrées dans le fichier JSON du jeu correspondant.
+
+Tests: Vérifier la logique de groupement par des tests unitaires (par ex. simuler le redimensionnement d’une carte et vérifier que les 4 autres cartes centrales ont bien adopté la même taille et que l’espacement est cohérent).
+
+Étape 3 : Reconnaissance des cartes sur l’image
+
+Implémenter l’extraction des cartes : à l’aide des coordonnées définies dans le JSON, extraire automatiquement chaque zone de carte du screenshot de la table (découper l’image de chaque carte à partir de l’écran recadré).
+
+Identifier la valeur et la couleur : analyser chaque extrait de carte pour reconnaître le numéro (ou figure) et le symbole (♥♣♦♠ par ex. pour un jeu de cartes). Cela peut se faire via de la reconnaissance d’image (template matching) ou OCR pour les caractères, selon le cas.
+
+Base de références : Préparer une collection d’images de référence pour chaque numéro/figure et chaque symbole, ou entraîner un modèle, afin de comparer et déterminer la carte affichée.
+
+Lecture des cartes du jeu : Combiner les résultats (numéro + symbole) pour déterminer la carte complète (par ex. "AS de cœur"). Répéter pour toutes les cartes détectées sur la table et en main des joueurs le cas échéant.
+
+    Tests: Pour chaque étape de reconnaissance, écrire des tests unitaires avec des images exemples (par ex. vérifier que l’extraction d’une carte à partir d’une image connue donne bien la bonne sous-image, ou que la reconnaissance identifie correctement une carte donnée à partir d’un échantillon d’image).
+
+Étape 4 : Moteur d’aide à la décision
+
+Interpréter l’état du jeu : à partir des cartes reconnues (ex: cartes communes et main du joueur dans une partie de poker), construire la représentation de l’état de la partie. Intégrer d’autres informations si nécessaire (mises, positions des joueurs, etc. – éventuel pour d’autres jeux).
+
+Calculer les probabilités ou scores : implémenter la logique de calcul (par ex. pour le poker, évaluer la force de la main, calculer les probabilités de gagner, etc., ou toute métrique utile à la décision pour le jeu en question).
+
+Générer une recommandation : en se basant sur ces calculs, formuler une suggestion d’action optimale ou une aide à la décision (par ex. « relancer », « se coucher » pour le poker, ou toute recommandation spécifique au jeu).
+
+Interface de sortie : Prévoir comment afficher ou retourner cette aide à la décision à l’utilisateur (console, interface graphique, overlay sur le jeu, etc.).
+
+Tests: Valider le moteur de décision avec des scénarios connus (par ex. mains de poker prédéfinies où l’issue est connue, pour vérifier que l’évaluation et la recommandation correspondent aux attentes).
+
 
 ## Principales fonctionnalités
 
