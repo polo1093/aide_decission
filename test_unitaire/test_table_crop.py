@@ -178,10 +178,7 @@ def test_apply_table_crop_matches_expected():
     reference_path = _locate_asset(
         "me.png",
         [
-            "ScreenTestUnitaire",
             "screen/launch",
-            "ScreenLaunch",
-            "screen"
         ]
     )
 

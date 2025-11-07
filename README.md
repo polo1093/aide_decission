@@ -1,4 +1,17 @@
-# Bot Poker
+# aide de décision
+
+To DO list
+
+
+1.a partir d'un scren d'écran + un image jepg + une image de réferance me.png déterminer les coordonnées à reporter dans le json pr crop l'image
+2.a partir de l'image crop position les zones de captures dans une interface détier avec des contraintes commes les cartes du joeurs on la même taille et même de symbole à regarder donc endroit où il y a la carte le numéro et la couleur (symbole) 
+            et ca doit être lier entre eux si je modifier une carte ca modifier pour l'autre aussi, le tout affin d'enregistrer dans le json
+3.
+
+
+
+
+
 
 Ce projet est un prototype de bot pour table de poker en ligne. Il capture l'écran, détecte les cartes et les boutons grâce à l'OCR puis évalue les chances de victoire pour choisir automatiquement l'action à jouer.
 
