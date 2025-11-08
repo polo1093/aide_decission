@@ -1,48 +1,52 @@
 # aide de décision
 
-To DO list: 
+**crop_core.py**
 
-Étape 1 : Recadrage du plateau de jeu et configuration initiale
+* [x] Trouver `ref_point` en matchant `me.*` dans le screenshot (cv2.matchTemplate).
+* [x] Croper taille `size` avec `top_left = ref_point − ref_offset` → renvoyer `(crop, (x0,y0))`.
+* [x] Vérif géométrique `verify_geom` + inférence `infer_size_and_offset`.
 
-Définir une structure de configuration (fichier JSON par jeu, ex: jeu1.json) pour stocker les coordonnées des zones du jeu (plateau, emplacements des cartes, etc.).
+**configure_table_crop.py**
 
-Capturer un screenshot de la fenêtre du jeu (nommé par exemple jeu1.png pour le jeu en cours).
+* [x] Charger `config/<game>/{test_crop.*, test_crop_result.*, me.*}` (PMU par défaut) + overrides.
+* [x] Écrire `coordinates.json` : `{"table_capture":{"size":[W,H], "ref_offset":[ox,oy]}}`.
+* [x] Valider N runs (tol géo ±k) et sauver un crop `_debug` (+ `--write-crop` si fourni).
 
-Déterminer manuellement la zone du plateau sur le screenshot (la portion de l’image correspondant à la table de jeu, sans les bordures/fenêtres du système).
+Plan (reformulé)
 
-Enregistrer les coordonnées de recadrage de la table dans le JSON de configuration du jeu (pour pouvoir cropper l’image du jeu à l’avenir).
+Extraction (image déjà crop de table)
 
-Prévoir l’extensibilité multi-jeux : s’assurer que la structure JSON et le code pourront gérer facilement d’autres jeux (noms de fichiers/config différents).
+Charger config/<game>/coordinates.json.
 
-    Tests: Écrire des tests unitaires pour valider le recadrage : par exemple, vérifier qu’en fournissant une image d’écran et des coordonnées de découpe, le programme obtient bien l’image recadrée attendue.
+Pour chaque région *_number / *_symbol, extraire un patch avec pad 3–4 px et clamp.
 
-Étape 2 : Outil interactif d’ajustement des zones de cartes
+Présence carte (filtre rapide)
 
-Développer un script Python d’étalonnage qui affiche le screenshot recadré du plateau et permet de placer/déplacer des rectangles représentant les zones importantes (emplacements de cartes, etc.).
+Heuristique “zone majoritairement blanche” → is_card_present(patch) renvoie True/False (évite de matcher du vide).
 
-Positionner les zones des cartes : ajouter des rectangles ajustables pour chaque carte sur la table (ex: les 5 cartes communes au centre pour le poker, les cartes des joueurs, etc.).
+Références
 
-Configurer les sous-zones des cartes : pour chaque emplacement de carte, définir également les zones du numéro (valeur) et du symbole (suit) sur la carte. Ces sous-zones pourront être définies pour une carte type et reproduites sur les autres si la disposition est identique.
+Dossier config/<game>/cards/
 
-Gestion des groupes de zones : implémenter une logique pour lier certains rectangles entre eux. Par exemple, les 5 zones de cartes du centre doivent garder la même taille et un espacement constant – ajuster un rectangle doit redimensionner/déplacer les autres en conséquence (afin de conserver un alignement régulier).
+numbers/<VALUE>/*.png (A,K,Q,J,10…2)
 
-Ajustement de l’espacement : permettre de modifier l’écart entre les cartes groupées (p. ex. en déplaçant une carte tout en maintenant une touche pour ajuster uniformément l’espace entre toutes).
+suits/<SUIT>/*.png (hearts, diamonds, clubs, spades)
 
-Interface utilisateur : permettre de valider une fois le placement terminé (par ex. bouton ou touche pour sauvegarder). Le programme doit alors enregistrer toutes les coordonnées calibrées dans le fichier JSON du jeu correspondant.
+Matching
 
-Tests: Vérifier la logique de groupement par des tests unitaires (par ex. simuler le redimensionnement d’une carte et vérifier que les 4 autres cartes centrales ont bien adopté la même taille et que l’espacement est cohérent).
+cv2.matchTemplate en niveaux de gris.
 
-Étape 3 : Reconnaissance des cartes sur l’image
+Score max par valeur + par symbole → garder le best label et score.
 
-Implémenter l’extraction des cartes : à l’aide des coordonnées définies dans le JSON, extraire automatiquement chaque zone de carte du screenshot de la table (découper l’image de chaque carte à partir de l’écran recadré).
+Sortie
 
-Identifier la valeur et la couleur : analyser chaque extrait de carte pour reconnaître le numéro (ou figure) et le symbole (♥♣♦♠ par ex. pour un jeu de cartes). Cela peut se faire via de la reconnaissance d’image (template matching) ou OCR pour les caractères, selon le cas.
+Pour chaque base player_card_1, etc. → value, suit, scores.
 
-Base de références : Préparer une collection d’images de référence pour chaque numéro/figure et chaque symbole, ou entraîner un modèle, afin de comparer et déterminer la carte affichée.
+Option --dump pour sauver les extraits dans debug/cards/.
 
-Lecture des cartes du jeu : Combiner les résultats (numéro + symbole) pour déterminer la carte complète (par ex. "AS de cœur"). Répéter pour toutes les cartes détectées sur la table et en main des joueurs le cas échéant.
 
-    Tests: Pour chaque étape de reconnaissance, écrire des tests unitaires avec des images exemples (par ex. vérifier que l’extraction d’une carte à partir d’une image connue donne bien la bonne sous-image, ou que la reconnaissance identifie correctement une carte donnée à partir d’un échantillon d’image).
+
+
 
 Étape 4 : Moteur d’aide à la décision
 
