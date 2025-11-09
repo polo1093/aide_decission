@@ -36,6 +36,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+# Assure l'accès aux modules du dépôt lorsque le script est lancé via un chemin absolu.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
