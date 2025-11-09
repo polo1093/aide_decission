@@ -37,13 +37,8 @@ import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
 
-from capture_cards import (
-    TemplateIndex,
-    extract_region_images,
-    is_card_present,
-    load_coordinates,
-    recognize_number_and_suit,
-)
+from capture_cards import TemplateIndex, is_card_present, recognize_number_and_suit
+from _utils import extract_region_images, load_coordinates
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
