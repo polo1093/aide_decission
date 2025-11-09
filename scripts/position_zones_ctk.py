@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from typing import Optional, Tuple, List
@@ -17,6 +18,7 @@ from typing import Optional, Tuple, List
 import customtkinter as ctk
 from PIL import ImageTk, Image
 
+from objet.game import Game
 from zone_project import ZoneProject
 
 APP_TITLE = "Zone Editor (CustomTkinter) — Multi-jeux (UI simplifiée)"
@@ -33,7 +35,7 @@ class ZoneEditorCTK:
         self.root.geometry("1600x940")
 
         # Modèle
-        self.project = ZoneProject()
+        self.project = ZoneProject(Game.for_script(Path(__file__).name))
         self.base_dir = self._default_base_dir(base_dir)
 
         # Image affichée

@@ -10,6 +10,8 @@ from PIL import Image
 import cv2
 import json
 
+from objet.game import Game
+
 # ---------- Matching ----------
 
 def find_ref_point(screenshot_img: Image.Image, reference_img: Image.Image) -> Tuple[int, int]:
@@ -268,6 +270,8 @@ def main(argv: Optional[list] = None) -> int:
     exp = _load_image(expected_path).convert("RGBA")
     ref = _load_image(reference_path).convert("RGBA")
 
+    game = Game.for_script(Path(__file__).name)
+
     # 1) Taille + offset (inférence par défaut)
     if args.size and args.ref_offset:
         size = args.size
@@ -285,6 +289,7 @@ def main(argv: Optional[list] = None) -> int:
     save_capture_json(output_path, size, ref_offset)
     print("Wrote:", output_path)
     print("table_capture.size:", list(size), "table_capture.ref_offset:", list(ref_offset))
+    game.update_from_capture(table_capture={"size": list(size), "ref_offset": list(ref_offset)})
 
     # 3) Vérification répétée (géométrie en priorité)
     from __main__ import verify_geom, crop_from_size_and_offset
@@ -314,6 +319,7 @@ def main(argv: Optional[list] = None) -> int:
         print("Wrote computed crop (custom):", args.write_crop)
 
     print(f"Summary: {ok_count}/{args.runs} OK (geom_tol={args.geom_tol}, pix_tol={args.pix_tol})")
+    print("Game capture context:", game.captures.table_capture)
     return 0 if ok_count == int(args.runs) else 2
 
 

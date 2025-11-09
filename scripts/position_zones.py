@@ -17,12 +17,15 @@
 # ---------------------------------------------------------------
 
 import os, json
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from typing import List, Dict, Any, Optional, Tuple
 
 import customtkinter as ctk
 from PIL import Image, ImageTk
+
+from objet.game import Game
 
 APP_TITLE = "Zone Editor (CustomTkinter) — Multi‑jeux"
 MAX_CANVAS_W = 1280
@@ -103,6 +106,7 @@ class ZoneEditorCTK:
         self.root.geometry("1700x1000")
 
         # État
+        self.game = Game.for_script(Path(__file__).name)
         self.base_dir = self._default_base_dir(base_dir)
         self.current_game: Optional[str] = None
         self.img_path: Optional[str] = None
@@ -114,11 +118,11 @@ class ZoneEditorCTK:
         self.scale: float = 1.0       # base_scale * user_zoom
 
         # Schéma courant
-        self.table_capture: Dict[str, Any] = {"enabled": True, "relative_bounds": [0, 0, 0, 0]}
-        self.templates: Dict[str, Dict[str, Any]] = {}
+        self.table_capture: Dict[str, Any] = self.game.captures.table_capture
+        self.templates: Dict[str, Dict[str, Any]] = self.game.captures.templates
         self.templates_resolved: Dict[str, Dict[str, Any]] = {}
         # regions: key -> {group, top_left:[x,y], value, label}
-        self.regions: Dict[str, Dict[str, Any]] = {}
+        self.regions: Dict[str, Dict[str, Any]] = self.game.captures.regions
 
         # Dessin
         self.rect_items: Dict[str, int] = {}   # key -> canvas rect id
@@ -320,16 +324,18 @@ class ZoneEditorCTK:
         self._prepare_display_image(img)
 
         # Par défaut pour table_capture
-        self.table_capture = {"enabled": True, "relative_bounds": [0, 0, img.width, img.height]}
+        self.table_capture.clear()
+        self.table_capture.update({"enabled": True, "relative_bounds": [0, 0, img.width, img.height]})
 
         # Charger JSON
-        self.templates, self.templates_resolved = {}, {}
+        self.templates.clear()
+        self.templates_resolved = {}
         self.regions.clear()
 
         templated = _load_templated(coord_path) if os.path.isfile(coord_path) else None
         if templated:
-            self.table_capture = templated.get("table_capture", self.table_capture)
-            self.templates = templated.get("templates", {})
+            self.table_capture.update(templated.get("table_capture", {}))
+            self.templates.update(templated.get("templates", {}))
             self.templates_resolved = _resolve_templates(self.templates)
             reg = templated.get("regions", {})
             for key, r in reg.items():
@@ -341,7 +347,8 @@ class ZoneEditorCTK:
             self.status.configure(text=f"{game_name}: image + {len(self.regions)} région(s) chargées")
         else:
             # pas de JSON → base minimale
-            self.templates = {"action_button": {"size": [165, 70], "type": "texte"}}
+            self.templates.clear()
+            self.templates.update({"action_button": {"size": [165, 70], "type": "texte"}})
             self.templates_resolved = _resolve_templates(self.templates)
             self.status.configure(text=f"{game_name}: image chargée (coordinates.json absent)")
 
@@ -351,6 +358,7 @@ class ZoneEditorCTK:
         self._populate_regions_list()
         self._populate_group_menu()
         self._update_info()
+        self._sync_game_capture()
 
     # ---------------- Image/Canvas ----------------
     def _prepare_display_image(self, img: Image.Image):
@@ -416,6 +424,14 @@ class ZoneEditorCTK:
         w, h = self.img_pil_original.size
         pct = int(round(self.scale / self.base_scale * 100)) if self.base_scale else int(self.scale*100)
         self.info_label.configure(text=f"{name}  |  {w}×{h}  |  zoom {pct}%")
+
+    def _sync_game_capture(self) -> None:
+        self.game.update_from_capture(
+            table_capture=self.table_capture,
+            regions=self.regions,
+            templates=self.templates,
+            reference_path=self.img_path,
+        )
 
     # ---------------- Liste & sélection ----------------
     def _populate_regions_list(self):

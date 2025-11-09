@@ -15,6 +15,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from objet.game import Game
+
 # -----------------------------
 # Helpers: config & path
 # -----------------------------
@@ -152,6 +154,11 @@ def main(argv: Optional[list] = None) -> int:
 
     size, ref_offset, ref_path = _load_capture_params(game_dir)
     ref_img = Image.open(ref_path).convert("RGBA")
+    game = Game.for_script(Path(__file__).name)
+    game.update_from_capture(
+        table_capture={"size": list(size), "ref_offset": list(ref_offset)},
+        reference_path=str(ref_path),
+    )
 
     video_path = Path(args.video) if args.video else _auto_video(game_dir)
     if not video_path or not video_path.exists():
@@ -170,7 +177,9 @@ def main(argv: Optional[list] = None) -> int:
         # BGR -> PIL RGBA
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_img = Image.fromarray(frame_rgb).convert("RGBA")
-        crop, origin = crop_from_size_and_offset(frame_img, size, ref_offset, reference_img=ref_img)
+        capture_size = tuple(game.captures.size or size)
+        capture_offset = tuple(game.captures.ref_offset or ref_offset)
+        crop, origin = crop_from_size_and_offset(frame_img, capture_size, capture_offset, reference_img=ref_img)
         # nom aléatoire dans [1, 10000]
         n = random.randint(1, 10000)
         fname = f"crop_{n}.png"
@@ -181,6 +190,7 @@ def main(argv: Optional[list] = None) -> int:
 
     cap.release()
     print(f"Done. {count} crops written to {out_dir}")
+    print("Game capture context:", game.captures.table_capture)
     return 0
 
 
