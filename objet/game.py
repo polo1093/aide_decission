@@ -211,16 +211,73 @@ class CaptureState:
 
 
 @dataclass
+class Table:
+    """Réunit cartes normalisées et informations de capture."""
+
+    cards: CardsState = field(default_factory=CardsState)
+    captures: CaptureState = field(default_factory=CaptureState)
+
+    def update_coordinates(
+        self,
+        *,
+        table_capture: Optional[Mapping[str, Any]] = None,
+        regions: Optional[Mapping[str, Any]] = None,
+        templates: Optional[Mapping[str, Any]] = None,
+        reference_path: Optional[str] = None,
+    ) -> None:
+        self.captures.update_from_coordinates(
+            table_capture=table_capture,
+            regions=regions,
+            templates=templates,
+            reference_path=reference_path,
+        )
+
+    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
+        self.captures.record_observation(base_key, observation)
+        self.cards.apply_observation(base_key, observation)
+
+    def card_coordinates(self) -> Dict[str, Any]:
+        """Retourne les coordonnées connues pour les cartes."""
+
+        card_regions = {
+            key: value
+            for key, value in self.captures.regions.items()
+            if key.startswith("board_card_") or key.startswith("player_card_")
+        }
+        return {
+            "table_capture": dict(self.captures.table_capture),
+            "regions": card_regions,
+            "reference_path": self.captures.reference_path,
+            "templates": {
+                key: value
+                for key, value in self.captures.templates.items()
+                if key.startswith("board_card_") or key.startswith("player_card_")
+            },
+        }
+
+
+@dataclass
 class Game:
     """Stocke l'état courant de la table et calcule les décisions."""
 
     workflow: Optional[str] = None
     raw_scan: Dict[str, Any] = field(default_factory=dict)
-    cards: CardsState = field(default_factory=CardsState)
+    table: Table = field(default_factory=Table)
     buttons: ButtonsState = field(default_factory=ButtonsState)
     metrics: MetricsState = field(default_factory=MetricsState)
-    captures: CaptureState = field(default_factory=CaptureState)
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def cards(self) -> CardsState:
+        """Accès direct aux cartes pour compatibilité historique."""
+
+        return self.table.cards
+
+    @property
+    def captures(self) -> CaptureState:
+        """Accès direct aux informations de capture."""
+
+        return self.table.captures
 
     # ---- Fabrication -------------------------------------------------
     @classmethod
@@ -228,7 +285,7 @@ class Game:
         game = cls(workflow=script_name)
         usage = SCRIPT_STATE_USAGE.get(script_name)
         if usage and StatePortion.CAPTURES in usage.portions:
-            game.captures.workflow = script_name
+            game.table.captures.workflow = script_name
         return game
 
     @classmethod
@@ -269,7 +326,7 @@ class Game:
                 suit=_extract_value(scan_table, symbol_key),
                 source="scan",
             )
-            self.cards.apply_observation(f"board_card_{i}", observation)
+            self.table.cards.apply_observation(f"board_card_{i}", observation)
         for i in range(1, 3):
             number_key = f"player_card_{i}_number"
             symbol_key = f"player_card_{i}_symbol"
@@ -278,7 +335,7 @@ class Game:
                 suit=_extract_value(scan_table, symbol_key),
                 source="scan",
             )
-            self.cards.apply_observation(f"player_card_{i}", observation)
+            self.table.cards.apply_observation(f"player_card_{i}", observation)
         self.metrics.update_from_scan(scan_table)
         self.buttons.update_from_scan(scan_table)
 
@@ -291,7 +348,7 @@ class Game:
         reference_path: Optional[str] = None,
         card_observations: Optional[Mapping[str, CardObservation]] = None,
     ) -> None:
-        self.captures.update_from_coordinates(
+        self.table.update_coordinates(
             table_capture=table_capture,
             regions=regions,
             templates=templates,
@@ -302,12 +359,11 @@ class Game:
                 self.add_card_observation(base_key, observation)
 
     def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
-        self.captures.record_observation(base_key, observation)
-        self.cards.apply_observation(base_key, observation)
+        self.table.add_card_observation(base_key, observation)
 
     # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
-        if len(self.cards.player_cards()) != 2:
+        if len(self.table.cards.player_cards()) != 2:
             return None
         try:
             self._calcul_chance_win()
@@ -334,8 +390,8 @@ class Game:
 
     # ---- Calculs internes --------------------------------------------
     def _calcul_chance_win(self) -> None:
-        me_cards = self.cards.player_cards()
-        board_cards = self.cards.board_cards()
+        me_cards = self.table.cards.player_cards()
+        board_cards = self.table.cards.board_cards()
         if len(me_cards) != 2:
             raise ValueError("Les cartes du joueur ne sont pas complètes ou invalides.")
         if len(board_cards) not in (0, 3, 4, 5):
@@ -354,7 +410,7 @@ class Game:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "workflow": self.workflow,
-            "cards": self.cards.as_strings(),
+            "cards": self.table.cards.as_strings(),
             "buttons": {
                 name: {
                     "name": btn.name,
@@ -372,10 +428,10 @@ class Game:
                 "players_count": self.metrics.players_count,
             },
             "capture": {
-                "table_capture": self.captures.table_capture,
-                "regions": self.captures.regions,
-                "templates": self.captures.templates,
-                "reference_path": self.captures.reference_path,
+                "table_capture": self.table.captures.table_capture,
+                "regions": self.table.captures.regions,
+                "templates": self.table.captures.templates,
+                "reference_path": self.table.captures.reference_path,
             },
         }
 
@@ -446,6 +502,7 @@ __all__ = [
     "ButtonsState",
     "MetricsState",
     "CaptureState",
+    "Table",
     "Game",
     "convert_card",
 ]
