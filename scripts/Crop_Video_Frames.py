@@ -4,11 +4,12 @@
 # Dépendances: opencv-python, pillow, numpy
 #   pip install opencv-python pillow numpy
 
-
+from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
 from typing import Optional, Tuple
+import random
 
 import cv2
 import numpy as np
@@ -113,7 +114,7 @@ def crop_from_size_and_offset(frame_rgba: Image.Image, size: Tuple[int,int], ref
     return crop, (x0, y0)
 
 # -----------------------------
-# Vidéo → crops chaque 1s
+# Vidéo → crops chaque 1s (nom aléatoire)
 # -----------------------------
 
 def _iter_time_step(cap: cv2.VideoCapture, seconds_step: float):
@@ -170,8 +171,9 @@ def main(argv: Optional[list] = None) -> int:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_img = Image.fromarray(frame_rgb).convert("RGBA")
         crop, origin = crop_from_size_and_offset(frame_img, size, ref_offset, reference_img=ref_img)
-        # nom de fichier
-        fname = f"crop_f{fidx:06d}.png"
+        # nom aléatoire dans [1, 10000]
+        n = random.randint(1, 10000)
+        fname = f"crop_{n}.png"
         out_path = out_dir / fname
         crop.save(out_path)
         count += 1
