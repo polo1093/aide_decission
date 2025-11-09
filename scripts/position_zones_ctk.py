@@ -18,6 +18,15 @@ from typing import Optional, Tuple, List
 import customtkinter as ctk
 from PIL import ImageTk, Image
 
+# Allow running this script directly (ensure project root on sys.path)
+import sys
+try:
+    _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    if str(_PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PROJECT_ROOT))
+except Exception:
+    pass
+
 from objet.game import Game
 from zone_project import ZoneProject
 
