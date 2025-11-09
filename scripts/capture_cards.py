@@ -3,13 +3,15 @@
 # ==============================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
 from pathlib import Path
 
 import json
 import cv2
 import numpy as np
 from PIL import Image
+
+from objet.game import CardObservation, Game
 
 # --- Modèle ---
 
@@ -55,14 +57,13 @@ def _resolve_templates(templates: Dict[str, dict]) -> Dict[str, dict]:
     return resolved
 
 
-def load_coordinates(path: Path) -> Tuple[Dict[str, Region], Dict[str, dict]]:
-    """Retourne (regions, templates_resolved).
-    regions: {key -> Region(key, group, top_left, size)}
-    """
+def load_coordinates(path: Path) -> Tuple[Dict[str, Region], Dict[str, dict], Dict[str, Any]]:
+    """Retourne (regions, templates_resolved, table_capture)."""
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     templates = data.get("templates", {})
     resolved = _resolve_templates(templates)
+    table_capture = data.get("table_capture", {})
     regs_raw = data.get("regions", {})
     regions: Dict[str, Region] = {}
     for k, r in regs_raw.items():
@@ -70,7 +71,7 @@ def load_coordinates(path: Path) -> Tuple[Dict[str, Region], Dict[str, dict]]:
         tl = r.get("top_left", [0, 0])
         w, h = resolved.get(g, {}).get("size", [0, 0])
         regions[k] = Region(key=k, group=g, top_left=(int(tl[0]), int(tl[1])), size=(int(w), int(h)))
-    return regions, resolved
+    return regions, resolved, table_capture
 
 
 # --- Extraction ---
@@ -306,7 +307,14 @@ def main(argv: Optional[list] = None) -> int:
 
     # 2) Charger table et coordonnées
     table_img = Image.open(table_path).convert("RGBA")
-    regions, resolved = load_coordinates(coords_path)
+    game = Game.for_script(Path(__file__).name)
+    regions, resolved, table_capture = load_coordinates(coords_path)
+    game.update_from_capture(
+        table_capture=table_capture,
+        regions={k: {"group": r.group, "top_left": r.top_left, "size": r.size} for k, r in regions.items()},
+        templates=resolved,
+        reference_path=str(table_path) if table_path else None,
+    )
 
     # 3) Extraire patches cartes
     pairs = extract_region_images(table_img, regions, pad=int(args.pad))
@@ -323,6 +331,10 @@ def main(argv: Optional[list] = None) -> int:
             print(f"{base_key}: probably empty (skip)")
             continue
         val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, idx)
+        game.add_card_observation(
+            base_key,
+            CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture"),
+        )
         hit_val = (val is not None and s_val >= float(args.num_th))
         hit_suit = (suit is not None and s_suit >= float(args.suit_th))
         status = "OK" if (hit_val and hit_suit) else "LOW"
@@ -332,6 +344,11 @@ def main(argv: Optional[list] = None) -> int:
             _save_png(debug_dir / f"{base_key}_symbol.png", patch_suit)
         if not (hit_val and hit_suit):
             ok = False
+
+    if game.cards.as_strings():
+        summary = game.cards.as_strings()
+        print("Résumé Game → joueur:", ", ".join(summary["player"]))
+        print("Résumé Game → board:", ", ".join(summary["board"]))
 
     return 0 if ok else 1
 
@@ -398,14 +415,21 @@ class TableState:
         return {k: {"value": v.value, "suit": v.suit, "value_score": v.value_score, "suit_score": v.suit_score, "stable": v.stable} for k, v in self.cards.items()}
 
 class TableController:
-    def __init__(self, game_dir: Path) -> None:
+    def __init__(self, game_dir: Path, game_state: Optional[Game] = None) -> None:
         self.game_dir = Path(game_dir)
         self.coords_path = self.game_dir / "coordinates.json"
         self.ref_path = self._first_of("me", (".png", ".jpg", ".jpeg"))
+        self.game = game_state or Game.for_script(Path(__file__).name)
+        self.regions, self.templates, table_capture = load_coordinates(self.coords_path)
+        self.game.update_from_capture(
+            table_capture=table_capture,
+            regions={k: {"group": r.group, "top_left": r.top_left, "size": r.size} for k, r in self.regions.items()},
+            templates=self.templates,
+            reference_path=str(self.ref_path) if self.ref_path else None,
+        )
         self.size, self.ref_offset = self._load_capture_params()
         # runtime caches
         self.ref_img = Image.open(self.ref_path).convert("RGBA") if self.ref_path else None
-        self.regions, self.templates = load_coordinates(self.coords_path)
         self.idx = TemplateIndex(self.game_dir / "cards")
         self.idx.load()
         self.state = TableState()
@@ -418,11 +442,9 @@ class TableController:
         return None
 
     def _load_capture_params(self) -> Tuple[Tuple[int,int], Tuple[int,int]]:
-        with self.coords_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        tc = data.get("table_capture", {})
-        size = tuple(tc.get("size", [0, 0]))
-        ref_offset = tuple(tc.get("ref_offset", [0, 0]))
+        tc = self.game.captures.table_capture
+        size = tc.get("size", [0, 0]) if isinstance(tc, dict) else [0, 0]
+        ref_offset = tc.get("ref_offset", [0, 0]) if isinstance(tc, dict) else [0, 0]
         return (int(size[0]), int(size[1])), (int(ref_offset[0]), int(ref_offset[1]))
 
     def process_frame(self, frame_rgba: Image.Image, frame_idx: int, *, num_th: float = 0.6, suit_th: float = 0.6, require_k: int = 2) -> Dict[str, Dict[str, object]]:
@@ -438,6 +460,10 @@ class TableController:
             val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, self.idx)
             obs = CardObs(val, suit, s_val, s_suit)
             self.state.update(base_key, obs, frame_idx, num_th=num_th, suit_th=suit_th, require_k=require_k)
+            self.game.add_card_observation(
+                base_key,
+                CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture"),
+            )
         return self.state.snapshot()
 
 

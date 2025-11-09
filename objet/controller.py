@@ -23,7 +23,8 @@ class Controller():
             # Todo
             # self.game.scan_to_data_table(self.scan.table)
             
-            button = self.game.decision(self.scan.table) 
+            self.game.update_from_scan(self.scan.table)
+            button = self.game.decision()
             if button:
                 self.click.click_button(self.scan.table[button]['coord_abs'])
         
@@ -44,11 +45,12 @@ class Controller():
             str: Une chaîne de caractères contenant les informations formatées.
         """
         # Récupération des informations de base
-        nbr_player = self.game.etat.get('Nbr_player', ' ')
-        pot = self.game.etat.get('pot', ' ')
-        fond = self.game.etat.get('fond', ' ')
-        chance_win_0 = self.game.etat.get('chance_win_0', ' ')
-        chance_win_x = self.game.etat.get('chance_win_x', ' ')
+        metrics = self.game.metrics
+        nbr_player = metrics.players_count
+        pot = metrics.pot
+        fond = metrics.fond
+        chance_win_0 = metrics.chance_win_0
+        chance_win_x = metrics.chance_win_x
 
         # Fonction pour arrondir à 4 chiffres significatifs
         def round_sig(x, sig=4):
@@ -64,12 +66,12 @@ class Controller():
         chance_win_x = round_sig(chance_win_x)
 
         # Informations sur les cartes du joueur
-        me_cards = self.game.etat.get('me_card', [])
-        me_cards_str = ', '.join([str(card) for card in me_cards if card is not None])
+        me_cards = [str(card) for card in self.game.cards.player_cards()]
+        me_cards_str = ', '.join(me_cards)
 
         # Informations sur le board
-        board_cards = self.game.etat.get('board', [])
-        board_cards_str = ', '.join([str(card) for card in board_cards if card is not None])
+        board_cards = [str(card) for card in self.game.cards.board_cards()]
+        board_cards_str = ', '.join(board_cards)
 
         # Informations sur les boutons
         buttons_info = []
@@ -78,20 +80,19 @@ class Controller():
         buttons_info.append('-' * 50)  # Ligne de séparation
 
         for i in range(1, 4):
-            button = self.game.etat.get(f'button_{i}')
+            button = self.game.buttons.buttons.get(f'button_{i}')
             if button:
                 name = button.name if button.name is not None else ''
                 value = round_sig(button.value) if button.value is not None else ''
                 gain = round_sig(button.gain) if button.gain is not None else ''
                 buttons_info.append(f"{f'Button {i}':<10} {name:<15} {str(value):<10} {str(gain):<10}")
             else:
-                # Si le bouton n'existe pas, remplir avec des valeurs vides
                 buttons_info.append(f"{f'Button {i}':<10} {'':<15} {'':<10} {'':<10}")
 
         buttons_str = '\n'.join(buttons_info)
 
         # Informations sur l'argent des joueurs
-        player_money = self.game.etat.get('player_money', {})
+        player_money = metrics.player_money
         player_money_info = []
         for player, money in player_money.items():
             money_str = str(round_sig(money)) if money is not None else 'Absent'
