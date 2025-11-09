@@ -9,5 +9,4 @@ opencv-python
 Pillow
 pytesseract
 matplotlib
-PySimpleGUI
 pyperclip

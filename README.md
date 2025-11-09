@@ -66,7 +66,7 @@ Tests: Valider le moteur de décision avec des scénarios connus (par ex. mains 
 - **Capture et analyse de l'écran** : le module `objet.scan` identifie les cartes du board et les mises via `pytesseract`.
 - **Modélisation de la partie** : `objet.game` calcule les probabilités de gain avec `pokereval` et détermine l'action optimale.
 - **Automatisation des clics** : `objet.cliqueur` simule les clics sur l'interface pour miser ou se coucher.
-- **Interface de test** : `test.py` lance une petite fenêtre PySimpleGUI permettant d'activer le scan et d'afficher les informations récupérées.
+- **Interface de test** : `test.py` lance désormais une fenêtre Tkinter permettant d'activer le scan et d'afficher les informations récupérées.
 
 Les positions des différents éléments à l'écran sont maintenant stockées dans `coordinates.json` et les images de référence sont dans le dossier `screen`.
 
