@@ -1,5 +1,12 @@
 {
   "table_capture": {
+    "enabled": true,
+    "relative_bounds": [
+      0,
+      0,
+      1776,
+      1256
+    ],
     "size": [
       1776,
       1256
@@ -36,8 +43,8 @@
     },
     "board_card_number": {
       "size": [
-        50,
-        35
+        60,
+        60
       ],
       "type": "carte_numero",
       "layout": {
@@ -46,8 +53,8 @@
     },
     "board_card_symbol": {
       "size": [
-        50,
-        50
+        80,
+        80
       ],
       "type": "carte_symbole",
       "layout": {
@@ -58,13 +65,21 @@
       "alias_of": "board_card_number",
       "layout": {
         "lock_same_y": true
-      }
+      },
+      "size": [
+        60,
+        60
+      ]
     },
     "player_card_symbol": {
       "alias_of": "board_card_symbol",
       "layout": {
         "lock_same_y": true
-      }
+      },
+      "size": [
+        80,
+        80
+      ]
     }
   },
   "regions": {
@@ -152,8 +167,8 @@
     "player_card_1_number": {
       "group": "player_card_number",
       "top_left": [
-        753,
-        915
+        756,
+        895
       ],
       "value": null,
       "label": "player_card_1_number"
@@ -161,8 +176,8 @@
     "player_card_2_number": {
       "group": "player_card_number",
       "top_left": [
-        891,
-        915
+        890,
+        895
       ],
       "value": null,
       "label": "player_card_2_number"
@@ -170,8 +185,8 @@
     "player_card_1_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        812,
-        1015
+        799,
+        984
       ],
       "value": null,
       "label": "player_card_1_symbol"
@@ -179,8 +194,8 @@
     "player_card_2_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        937,
-        1015
+        930,
+        984
       ],
       "value": null,
       "label": "player_card_2_symbol"
@@ -188,8 +203,8 @@
     "board_card_1_number": {
       "group": "board_card_number",
       "top_left": [
-        537,
-        487
+        534,
+        475
       ],
       "value": null,
       "label": "board_card_1_number"
@@ -197,8 +212,8 @@
     "board_card_2_number": {
       "group": "board_card_number",
       "top_left": [
-        683,
-        487
+        679,
+        475
       ],
       "value": null,
       "label": "board_card_2_number"
@@ -206,8 +221,8 @@
     "board_card_3_number": {
       "group": "board_card_number",
       "top_left": [
-        815,
-        487
+        822,
+        475
       ],
       "value": null,
       "label": "board_card_3_number"
@@ -215,8 +230,8 @@
     "board_card_4_number": {
       "group": "board_card_number",
       "top_left": [
-        963,
-        487
+        966,
+        475
       ],
       "value": null,
       "label": "board_card_4_number"
@@ -224,8 +239,8 @@
     "board_card_5_number": {
       "group": "board_card_number",
       "top_left": [
-        1102,
-        487
+        1111,
+        475
       ],
       "value": null,
       "label": "board_card_5_number"
@@ -233,8 +248,8 @@
     "board_card_1_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        587,
-        582
+        577,
+        564
       ],
       "value": null,
       "label": "board_card_1_symbol"
@@ -242,8 +257,8 @@
     "board_card_2_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        734,
-        582
+        722,
+        564
       ],
       "value": null,
       "label": "board_card_2_symbol"
@@ -251,8 +266,8 @@
     "board_card_3_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        889,
-        582
+        869,
+        564
       ],
       "value": null,
       "label": "board_card_3_symbol"
@@ -260,8 +275,8 @@
     "board_card_4_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        1027,
-        582
+        1008,
+        564
       ],
       "value": null,
       "label": "board_card_4_symbol"
@@ -269,8 +284,8 @@
     "board_card_5_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        1174,
-        582
+        1152,
+        564
       ],
       "value": null,
       "label": "board_card_5_symbol"
