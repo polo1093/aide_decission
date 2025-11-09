@@ -142,7 +142,7 @@ def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(description="Crop table every N seconds from a test video")
     parser.add_argument("--game-dir", default=str(_default_game_dir()), help="Path to game dir (default: auto-detected config/PMU)")
     parser.add_argument("--video", help="Explicit video path; default: game_dir/debug/cards_video/cards_video.*")
-    parser.add_argument("--interval", type=float, default=1.0, help="Seconds between crops (default: 1.0)")
+    parser.add_argument("--interval", type=float, default=3.0, help="Seconds between crops (default: 3.0)")
     parser.add_argument("--out", help="Output dir (default: game_dir/debug/crops)")
     args = parser.parse_args(argv)
 
