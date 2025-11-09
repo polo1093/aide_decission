@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 import os, json
+from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 from collections import OrderedDict
 from PIL import Image
+
+from objet.game import Game
 
 def coerce_int(v: Any, default: int = 0) -> int:
     try:
@@ -91,18 +94,19 @@ class ZoneProject:
     Gère : chargement/écriture JSON, manipulations des régions, tailles de groupe…
     """
 
-    def __init__(self) -> None:
+    def __init__(self, game: Optional[Game] = None) -> None:
+        self.game = game or Game.for_script(Path(__file__).name)
         self.base_dir: str = ""
         self.current_game: Optional[str] = None
         self.image_path: Optional[str] = None
         self.image: Optional[Image.Image] = None
-        self.table_capture: Dict[str, Any] = {"enabled": True, "relative_bounds": [0, 0, 0, 0]}
+        self.table_capture: Dict[str, Any] = self.game.captures.table_capture
 
         # Données décrites par le JSON
-        self.templates: Dict[str, Any] = {}
+        self.templates: Dict[str, Any] = self.game.captures.templates
         self._templates_resolved: Dict[str, Any] = {}
         # regions : key -> {"group": str, "top_left":[x,y], "value": Any, "label": str}
-        self.regions: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+        self.regions: "OrderedDict[str, Dict[str, Any]]" = self.game.captures.regions
 
     # ---------- Propriétés utiles ----------
     @property
@@ -164,14 +168,15 @@ class ZoneProject:
         self.image_path = img_path
         self.image = Image.open(img_path).convert("RGBA")
         W, H = self.image_size
-        self.table_capture = {"enabled": True, "relative_bounds": [0, 0, W, H]}
-        self.templates = {}
+        self.table_capture.clear()
+        self.table_capture.update({"enabled": True, "relative_bounds": [0, 0, W, H]})
+        self.templates.clear()
         self.regions.clear()
 
         data = _load_templated_json(coord_path) if os.path.isfile(coord_path) else None
         if data:
-            self.table_capture = data.get("table_capture", self.table_capture)
-            self.templates = data.get("templates", {})
+            self.table_capture.update(data.get("table_capture", {}))
+            self.templates.update(data.get("templates", {}))
             regs = data.get("regions", {})
             for key, r in regs.items():
                 group = r.get("group", "")
@@ -186,7 +191,17 @@ class ZoneProject:
             self._clamp_all()
         else:
             # base minimale si pas de JSON
-            self.templates = {"action_button": {"size": [165, 70], "type": "texte"}}
+            self.templates.update({"action_button": {"size": [165, 70], "type": "texte"}})
+
+        self._sync_game_capture()
+
+    def _sync_game_capture(self) -> None:
+        self.game.update_from_capture(
+            table_capture=self.table_capture,
+            regions=self.regions,
+            templates=self.templates,
+            reference_path=self.image_path,
+        )
 
     # ---------- Opérations régions ----------
     def list_regions(self) -> List[str]:
