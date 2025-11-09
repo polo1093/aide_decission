@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 import types
 
+from collections import OrderedDict
+
 import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -118,6 +120,37 @@ def test_scan_then_capture_overwrites_board(sample_scan_table):
         CardObservation(value="7", suit="clubs", value_score=0.7, suit_score=0.8, source="capture"),
     )
     assert game.cards.as_strings()["board"][0] == "7♣"
+
+
+def test_table_exposes_card_coordinates():
+    game = Game()
+    regions = OrderedDict(
+        {
+            "board_card_1": {"position": [0, 0, 10, 10]},
+            "pot": {"position": [20, 20, 40, 40]},
+            "player_card_1": {"position": [5, 5, 15, 15]},
+        }
+    )
+    templates = {
+        "board_card_1": "tpl_board",
+        "button_1": "tpl_button",
+        "player_card_1": "tpl_player",
+    }
+    game.update_from_capture(
+        table_capture={"size": [800, 600], "ref_offset": [10, 10]},
+        regions=regions,
+        templates=templates,
+        reference_path="/tmp/ref.png",
+    )
+
+    card_coords = game.table.card_coordinates()
+
+    assert "board_card_1" in card_coords["regions"]
+    assert "player_card_1" in card_coords["regions"]
+    assert "pot" not in card_coords["regions"]
+    assert "board_card_1" in card_coords["templates"]
+    assert "button_1" not in card_coords["templates"]
+    assert card_coords["table_capture"]["size"] == [800, 600]
 
 
 def test_script_usage_catalogue():
