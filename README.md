@@ -6,14 +6,12 @@ Plan (reformulé)
 
 
 
-Charger config/<game>/coordinates.json.
 
+To do list 
 
-To do
+1.faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards, pr une configuratiion rapides
 
-faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards
-
-
+2.
 
 
 Étape 4 : Moteur d’aide à la décision
@@ -69,9 +67,8 @@ Spécifiez les noms de régions définis dans `coordinates.json` ou des coordonn
 absolues pour découper la valeur et le symbole d'une carte :
 
 ```bash
-python scripts/capture_cards.py \
-    --number player_card_1_number \
-    --symbol player_card_1_symbol \
+python scripts/capture_cards.py 
+    --number player_card_1_number 
     --ref 1000,200
 ```
 
