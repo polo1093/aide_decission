@@ -80,7 +80,7 @@ class Controller():
         buttons_info.append('-' * 50)  # Ligne de séparation
 
         for i in range(1, 4):
-            button = self.game.buttons.buttons.get(f'button_{i}')
+            button = self.game.table.buttons.buttons.get(f'button_{i}')
             if button:
                 name = button.name if button.name is not None else ''
                 value = round_sig(button.value) if button.value is not None else ''

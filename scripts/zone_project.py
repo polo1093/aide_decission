@@ -34,13 +34,13 @@ class ZoneProject:
         self.current_game: Optional[str] = None
         self.image_path: Optional[str] = None
         self.image: Optional[Image.Image] = None
-        self.table_capture: Dict[str, Any] = self.game.captures.table_capture
+        self.table_capture: Dict[str, Any] = self.game.table.captures.table_capture
 
         # Données décrites par le JSON
-        self.templates: Dict[str, Any] = self.game.captures.templates
+        self.templates: Dict[str, Any] = self.game.table.captures.templates
         self._templates_resolved: Dict[str, Any] = {}
         # regions : key -> {"group": str, "top_left":[x,y], "value": Any, "label": str}
-        self.regions: "OrderedDict[str, Dict[str, Any]]" = self.game.captures.regions
+        self.regions: "OrderedDict[str, Dict[str, Any]]" = self.game.table.captures.regions
 
     # ---------- Propriétés utiles ----------
     @property

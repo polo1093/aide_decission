@@ -97,8 +97,8 @@ def test_game_from_scan_updates_state(sample_scan_table):
     assert pytest.approx(game.metrics.fond) == 10.00
     assert game.metrics.players_count == 2
 
-    assert game.buttons.buttons["button_1"].name.lower().startswith("m")
-    assert game.buttons.buttons["button_3"].name == "Se coucher"
+    assert game.table.buttons.buttons["button_1"].name.lower().startswith("m")
+    assert game.table.buttons.buttons["button_3"].name == "Se coucher"
 
 
 def test_capture_observation_uses_aliases():
