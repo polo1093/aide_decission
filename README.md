@@ -9,7 +9,9 @@ Plan (reformulé)
 Charger config/<game>/coordinates.json.
 
 
+To do
 
+faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards
 
 
 

@@ -27,6 +27,18 @@ try:
 except Exception:
     pass
 
+# Disable save-as dialog for direct save to suggested path
+def _direct_save_as_filename(**kwargs):
+    try:
+        initialdir = kwargs.get("initialdir") or os.getcwd()
+        initialfile = kwargs.get("initialfile") or "coordinates.json"
+        return os.path.join(initialdir, initialfile)
+    except Exception:
+        # Fallback: default file in CWD
+        return os.path.join(os.getcwd(), "coordinates.json")
+
+filedialog.asksaveasfilename = _direct_save_as_filename
+
 from objet.game import Game
 from zone_project import ZoneProject
 
