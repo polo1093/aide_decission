@@ -16,7 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from objet.game import CardObservation, Game
+from objet.entities.card import CardObservation
+from objet.services.game import Game
 from _utils import extract_region_images, load_coordinates
 
 # --- Modèle ---
