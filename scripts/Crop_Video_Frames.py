@@ -15,6 +15,15 @@ import cv2
 import numpy as np
 from PIL import Image
 
+# Ensure project root is on sys.path when running directly
+import sys
+try:
+    _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    if str(_PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PROJECT_ROOT))
+except Exception:
+    pass
+
 from objet.game import Game
 
 # -----------------------------

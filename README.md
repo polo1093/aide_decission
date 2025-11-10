@@ -1,48 +1,14 @@
 # aide de décision
 
-**crop_core.py**
 
-* [x] Trouver `ref_point` en matchant `me.*` dans le screenshot (cv2.matchTemplate).
-* [x] Croper taille `size` avec `top_left = ref_point − ref_offset` → renvoyer `(crop, (x0,y0))`.
-* [x] Vérif géométrique `verify_geom` + inférence `infer_size_and_offset`.
-
-**configure_table_crop.py**
-
-* [x] Charger `config/<game>/{test_crop.*, test_crop_result.*, me.*}` (PMU par défaut) + overrides.
-* [x] Écrire `coordinates.json` : `{"table_capture":{"size":[W,H], "ref_offset":[ox,oy]}}`.
-* [x] Valider N runs (tol géo ±k) et sauver un crop `_debug` (+ `--write-crop` si fourni).
 
 Plan (reformulé)
 
-Extraction (image déjà crop de table)
+
 
 Charger config/<game>/coordinates.json.
 
-Pour chaque région *_number / *_symbol, extraire un patch avec pad 3–4 px et clamp.
 
-Présence carte (filtre rapide)
-
-Heuristique “zone majoritairement blanche” → is_card_present(patch) renvoie True/False (évite de matcher du vide).
-
-Références
-
-Dossier config/<game>/cards/
-
-numbers/<VALUE>/*.png (A,K,Q,J,10…2)
-
-suits/<SUIT>/*.png (hearts, diamonds, clubs, spades)
-
-Matching
-
-cv2.matchTemplate en niveaux de gris.
-
-Score max par valeur + par symbole → garder le best label et score.
-
-Sortie
-
-Pour chaque base player_card_1, etc. → value, suit, scores.
-
-Option --dump pour sauver les extraits dans debug/cards/.
 
 
 
@@ -61,14 +27,6 @@ Interface de sortie : Prévoir comment afficher ou retourner cette aide à la d�
 Tests: Valider le moteur de décision avec des scénarios connus (par ex. mains de poker prédéfinies où l’issue est connue, pour vérifier que l’évaluation et la recommandation correspondent aux attentes).
 
 
-## Principales fonctionnalités
-
-- **Capture et analyse de l'écran** : le module `objet.scan` identifie les cartes du board et les mises via `pytesseract`.
-- **Modélisation de la partie** : `objet.game` calcule les probabilités de gain avec `pokereval` et détermine l'action optimale.
-- **Automatisation des clics** : `objet.cliqueur` simule les clics sur l'interface pour miser ou se coucher.
-- **Interface de test** : `test.py` lance désormais une fenêtre Tkinter permettant d'activer le scan et d'afficher les informations récupérées.
-
-Les positions des différents éléments à l'écran sont maintenant stockées dans `coordinates.json` et les images de référence sont dans le dossier `screen`.
 
 ## Installation
 

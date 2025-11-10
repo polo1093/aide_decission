@@ -87,7 +87,7 @@
       "group": "action_button",
       "top_left": [
         1139,
-        1142
+        1152
       ],
       "value": null,
       "label": "button_1"
@@ -95,8 +95,8 @@
     "button_2": {
       "group": "action_button",
       "top_left": [
-        1320,
-        1142
+        1340,
+        1152
       ],
       "value": null,
       "label": "button_2"
@@ -104,8 +104,8 @@
     "button_3": {
       "group": "action_button",
       "top_left": [
-        1576,
-        1142
+        1582,
+        1152
       ],
       "value": null,
       "label": "button_3"
