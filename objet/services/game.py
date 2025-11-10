@@ -1,11 +1,4 @@
-"""Gestion centralisée de l'état du jeu.
-
-Le module expose :class:`Game` qui encapsule désormais l'ensemble des
-structures manipulées par les différents workflows (cartes, boutons,
-métriques et paramètres de capture). Les scripts s'appuient sur les méthodes
-`from_scan` et `from_capture` pour remplir l'état sans manipuler directement
-les dictionnaires intermédiaires.
-"""
+"""Gestion centralisée de l'état du jeu."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,40 +8,13 @@ from typing import Any, Dict, Mapping, Optional
 from pokereval.hand_evaluator import HandEvaluator
 
 import tool
-from objet.table import (
-    ButtonsState,
-    CardObservation,
-    CardsState,
-    CaptureState,
-    Table,
-    convert_card,
-    extract_scan_value,
-)
+from objet.entities.card import CardObservation, convert_card
+from objet.services.table import Table
+from objet.state import ButtonsState, CardsState, CaptureState, MetricsState
+
 from scripts.state_requirements import SCRIPT_STATE_USAGE, StatePortion
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class MetricsState:
-    """Regroupe les métriques numériques."""
-
-    pot: Optional[float] = None
-    fond: Optional[float] = None
-    chance_win_0: Optional[float] = None
-    chance_win_x: Optional[float] = None
-    player_money: Dict[str, Optional[float]] = field(
-        default_factory=lambda: {f"J{i}": None for i in range(1, 6)}
-    )
-    players_count: int = 0
-
-    def update_from_scan(self, scan_table: Mapping[str, Any]) -> None:
-        self.pot = tool.convert_to_float(extract_scan_value(scan_table, "pot"))
-        self.fond = tool.convert_to_float(extract_scan_value(scan_table, "fond"))
-        for key in list(self.player_money.keys()):
-            raw_key = f"player_money_{key}"
-            self.player_money[key] = tool.convert_to_float(extract_scan_value(scan_table, raw_key))
-        self.players_count = sum(1 for money in self.player_money.values() if money not in (None, 0))
 
 
 @dataclass
@@ -209,12 +175,11 @@ class Game:
 
 
 __all__ = [
+    "Game",
     "CardObservation",
     "CardsState",
     "ButtonsState",
     "MetricsState",
     "CaptureState",
-    "Table",
-    "Game",
     "convert_card",
 ]

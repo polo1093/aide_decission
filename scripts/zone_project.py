@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Tuple, List
 from collections import OrderedDict
 from PIL import Image
 
-from objet.game import Game
+from objet.services.game import Game
 from _utils import clamp_top_left, coerce_int, resolve_templates
 
 def _load_templated_json(coord_path: str) -> Optional[Dict[str, Any]]:

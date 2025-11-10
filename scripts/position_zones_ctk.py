@@ -39,7 +39,7 @@ def _direct_save_as_filename(**kwargs):
 
 filedialog.asksaveasfilename = _direct_save_as_filename
 
-from objet.game import Game
+from objet.services.game import Game
 from zone_project import ZoneProject
 
 APP_TITLE = "Zone Editor (CustomTkinter) — Multi-jeux (UI simplifiée)"

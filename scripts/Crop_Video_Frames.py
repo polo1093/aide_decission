@@ -24,7 +24,7 @@ try:
 except Exception:
     pass
 
-from objet.game import Game
+from objet.services.game import Game
 
 # -----------------------------
 # Helpers: config & path
