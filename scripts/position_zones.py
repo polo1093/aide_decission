@@ -25,7 +25,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import customtkinter as ctk
 from PIL import Image, ImageTk
 
-from objet.game import Game
+from objet.services.game import Game
 from _utils import clamp_top_left, coerce_int, resolve_templates
 
 APP_TITLE = "Zone Editor (CustomTkinter) — Multi‑jeux"

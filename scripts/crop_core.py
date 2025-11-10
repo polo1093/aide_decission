@@ -10,7 +10,7 @@ from PIL import Image
 import cv2
 import json
 
-from objet.game import Game
+from objet.services.game import Game
 
 # ---------- Matching ----------
 

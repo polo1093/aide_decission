@@ -1,7 +1,7 @@
 """Definitions des portions d'état utilisées par les scripts de workflow.
 
 Ce module centralise la cartographie demandée afin que les outils ou
-l'interface puissent instancier :class:`objet.game.Game` avec les éléments
+l'interface puissent instancier :class:`objet.services.game.Game` avec les éléments
 pertinents pour chaque script. Les catégories sont volontairement grossières
 (cartes, boutons, métriques, captures) et couvrent les besoins majeurs des
 workflows existants.

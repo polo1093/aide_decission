@@ -2,10 +2,9 @@ import cv2
 import numpy as np
 import PIL
 from PIL import ImageGrab, Image
-import pyautogui
-
-from folder_tool import ocr, timer
-from objet import game, scan, cliqueur
+from objet.services.cliqueur import Cliqueur
+from objet.services.game import Game
+from objet.services.scan import ScanTable
 
 
 class Controller():
@@ -14,9 +13,9 @@ class Controller():
         self.running = False
         
         self.game_stat = {}
-        self.game = game.Game()
-        self.scan = scan.ScanTable()
-        self.click = cliqueur.Cliqueur()
+        self.game = Game()
+        self.scan = ScanTable()
+        self.click = Cliqueur()
     def main(self):
         if self.scan.scan():
              # machine à état de la partie et save 
