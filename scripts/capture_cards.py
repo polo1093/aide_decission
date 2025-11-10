@@ -335,7 +335,7 @@ class TableController:
         return None
 
     def _load_capture_params(self) -> Tuple[Tuple[int,int], Tuple[int,int]]:
-        tc = self.game.captures.table_capture
+        tc = self.game.table.captures.table_capture
         size = tc.get("size", [0, 0]) if isinstance(tc, dict) else [0, 0]
         ref_offset = tc.get("ref_offset", [0, 0]) if isinstance(tc, dict) else [0, 0]
         return (int(size[0]), int(size[1])), (int(ref_offset[0]), int(ref_offset[1]))

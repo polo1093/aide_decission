@@ -73,11 +73,11 @@ class ZoneEditorCTK:
         self.scale: float = 1.0       # base_scale * user_zoom
 
         # Schéma courant
-        self.table_capture: Dict[str, Any] = self.game.captures.table_capture
-        self.templates: Dict[str, Dict[str, Any]] = self.game.captures.templates
+        self.table_capture: Dict[str, Any] = self.game.table.captures.table_capture
+        self.templates: Dict[str, Dict[str, Any]] = self.game.table.captures.templates
         self.templates_resolved: Dict[str, Dict[str, Any]] = {}
         # regions: key -> {group, top_left:[x,y], value, label}
-        self.regions: Dict[str, Dict[str, Any]] = self.game.captures.regions
+        self.regions: Dict[str, Dict[str, Any]] = self.game.table.captures.regions
 
         # Dessin
         self.rect_items: Dict[str, int] = {}   # key -> canvas rect id

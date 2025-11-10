@@ -319,7 +319,7 @@ def main(argv: Optional[list] = None) -> int:
         print("Wrote computed crop (custom):", args.write_crop)
 
     print(f"Summary: {ok_count}/{args.runs} OK (geom_tol={args.geom_tol}, pix_tol={args.pix_tol})")
-    print("Game capture context:", game.captures.table_capture)
+    print("Game capture context:", game.table.captures.table_capture)
     return 0 if ok_count == int(args.runs) else 2
 
 
