@@ -186,8 +186,8 @@ def main(argv: Optional[list] = None) -> int:
         # BGR -> PIL RGBA
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_img = Image.fromarray(frame_rgb).convert("RGBA")
-        capture_size = tuple(game.captures.size or size)
-        capture_offset = tuple(game.captures.ref_offset or ref_offset)
+        capture_size = tuple(game.table.captures.size or size)
+        capture_offset = tuple(game.table.captures.ref_offset or ref_offset)
         crop, origin = crop_from_size_and_offset(frame_img, capture_size, capture_offset, reference_img=ref_img)
         # nom aléatoire dans [1, 10000]
         n = random.randint(1, 10000)
@@ -199,7 +199,7 @@ def main(argv: Optional[list] = None) -> int:
 
     cap.release()
     print(f"Done. {count} crops written to {out_dir}")
-    print("Game capture context:", game.captures.table_capture)
+    print("Game capture context:", game.table.captures.table_capture)
     return 0
 
 
