@@ -89,6 +89,21 @@ python scripts/copy_python_sources.py
 
 Vous pouvez ignorer d'autres fichiers avec `--exclude chemin/vers/fichier.py`.
 
+## Utilitaires de calibration partagés
+
+Les scripts de calibration (`capture_cards.py`, `identify_card.py`, `position_zones*.py`,
+`zone_project.py`) s'appuient désormais sur un module commun `scripts/_utils.py`.
+Ce module centralise :
+
+- le chargement de `coordinates.json` (résolution des `templates`, accès à
+  `table_capture`, conversion robuste des entiers) ;
+- les fonctions de clamp et d'extraction d'images utilisées par les différents
+  CLI/UI.
+
+Les interfaces en ligne de commande existantes ne changent pas : les mêmes
+options et arguments continuent de fonctionner, avec un comportement aligné
+entre tous les outils.
+
 ## Avertissement
 
 Ce projet est fourni à titre expérimental. L'utilisation d'un bot sur des plateformes de poker en ligne peut être interdite par leurs conditions d'utilisation. L'auteur décline toute responsabilité en cas d'usage inapproprié.

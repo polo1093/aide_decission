@@ -3,10 +3,9 @@
 # ==============================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List, Any
 from pathlib import Path
+from typing import Dict, Optional, List, Tuple
 
-import json
 import cv2
 import numpy as np
 from PIL import Image
@@ -18,91 +17,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from objet.game import CardObservation, Game
+from _utils import extract_region_images, load_coordinates
 
 # --- Modèle ---
-
-@dataclass
-class Region:
-    key: str
-    group: str
-    top_left: Tuple[int, int]  # (x,y)
-    size: Tuple[int, int]      # (w,h)
-
-
-# --- JSON / coordinates ---
-
-def _coerce_int(v, d=0):
-    try:
-        return int(round(float(v)))
-    except Exception:
-        return d
-
-
-def _resolve_templates(templates: Dict[str, dict]) -> Dict[str, dict]:
-    """Résout alias_of → {group: {size:[w,h], type:str}}"""
-    def get_size(g: str, seen=None):
-        if seen is None:
-            seen = set()
-        if g in seen:
-            return 0, 0
-        seen.add(g)
-        t = templates.get(g, {})
-        if "size" in t:
-            w, h = t.get("size", [0, 0])
-            return _coerce_int(w), _coerce_int(h)
-        if "alias_of" in t:
-            return get_size(str(t["alias_of"]), seen)
-        return 0, 0
-
-    resolved: Dict[str, dict] = {}
-    for g in list(templates.keys()):
-        w, h = get_size(g)
-        parent = templates[g].get("alias_of")
-        typ = templates[g].get("type", templates.get(parent, {}).get("type", ""))
-        resolved[g] = {"size": [w, h], "type": typ}
-    return resolved
-
-
-def load_coordinates(path: Path) -> Tuple[Dict[str, Region], Dict[str, dict], Dict[str, Any]]:
-    """Retourne (regions, templates_resolved, table_capture)."""
-    with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    templates = data.get("templates", {})
-    resolved = _resolve_templates(templates)
-    table_capture = data.get("table_capture", {})
-    regs_raw = data.get("regions", {})
-    regions: Dict[str, Region] = {}
-    for k, r in regs_raw.items():
-        g = r.get("group", "")
-        tl = r.get("top_left", [0, 0])
-        w, h = resolved.get(g, {}).get("size", [0, 0])
-        regions[k] = Region(key=k, group=g, top_left=(int(tl[0]), int(tl[1])), size=(int(w), int(h)))
-    return regions, resolved, table_capture
-
-
-# --- Extraction ---
-
-def clamp_bbox(x1, y1, x2, y2, W, H):
-    x1 = max(0, min(x1, W))
-    y1 = max(0, min(y1, H))
-    x2 = max(0, min(x2, W))
-    y2 = max(0, min(y2, H))
-    if x2 < x1:
-        x1, x2 = x2, x1
-    if y2 < y1:
-        y1, y2 = y2, y1
-    return x1, y1, x2, y2
-
-
-def extract_patch(img: Image.Image, top_left: Tuple[int,int], size: Tuple[int,int], pad: int = 4) -> Image.Image:
-    x, y = map(int, top_left)
-    w, h = map(int, size)
-    W, H = img.size
-    x1, y1 = x - pad, y - pad
-    x2, y2 = x + w + pad, y + h + pad
-    x1, y1, x2, y2 = clamp_bbox(x1, y1, x2, y2, W, H)
-    return img.crop((x1, y1, x2, y2))
-
 
 def is_card_present(patch: Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
     """Heuristique simple: proportion de pixels *très clairs* sur toute la zone.
@@ -210,36 +127,6 @@ def recognize_number_and_suit(number_patch: Image.Image, suit_patch: Image.Image
             best_suit_score = score
             best_suit = label
     return best_num, best_suit, best_num_score, best_suit_score
-
-
-# --- Orchestrations ---
-
-def extract_region_images(table_img: Image.Image, regions: Dict[str, Region], *, pad: int = 4,
-                          groups_numbers: Tuple[str,...] = ("player_card_number", "board_card_number"),
-                          groups_suits: Tuple[str,...] = ("player_card_symbol", "board_card_symbol")) -> Dict[str, Tuple[Image.Image, Image.Image]]:
-    """Retourne { card_key: (number_patch, suit_patch) } pour toutes les cartes trouvées.
-    Associe number_*/symbol_* par préfixe commun (ex: player_card_1_*). Si association impossible, ignore.
-    """
-    # Index par préfixe logique (tout sauf le suffixe _number/_symbol)
-    pairs: Dict[str, Dict[str, Image.Image]] = {}
-    # 1) number
-    for k, r in regions.items():
-        if r.group in groups_numbers:
-            patch = extract_patch(table_img, r.top_left, r.size, pad)
-            base = k.replace("_number", "")
-            pairs.setdefault(base, {})["number"] = patch
-    # 2) symbol
-    for k, r in regions.items():
-        if r.group in groups_suits:
-            patch = extract_patch(table_img, r.top_left, r.size, pad)
-            base = k.replace("_symbol", "")
-            pairs.setdefault(base, {})["symbol"] = patch
-    # 3) filtre cartes complètes (num+symb)
-    out: Dict[str, Tuple[Image.Image, Image.Image]] = {}
-    for base, d in pairs.items():
-        if "number" in d and "symbol" in d:
-            out[base] = (d["number"], d["symbol"])
-    return out
 
 
 # ==============================

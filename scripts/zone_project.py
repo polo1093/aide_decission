@@ -10,73 +10,7 @@ from collections import OrderedDict
 from PIL import Image
 
 from objet.game import Game
-
-def coerce_int(v: Any, default: int = 0) -> int:
-    try:
-        return int(round(float(v)))
-    except Exception:
-        return default
-
-def clamp_top_left(x: int, y: int, w: int, h: int, W: int, H: int) -> Tuple[int, int]:
-    if W <= 0 or H <= 0:
-        return x, y
-    x = max(0, min(x, max(0, W - w)))
-    y = max(0, min(y, max(0, H - h)))
-    return x, y
-
-def _resolve_templates(templates: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """
-    Résout alias_of → {group: {size:[w,h], type:str, layout:dict}}
-    layout peut contenir: { "lock_same_y": bool }
-    """
-    resolved: Dict[str, Dict[str, Any]] = {}
-
-    def get_size(g: str, seen=None) -> Tuple[int, int]:
-        if seen is None:
-            seen = set()
-        if g in seen:
-            return 0, 0
-        seen.add(g)
-        t = templates.get(g, {})
-        if "size" in t:
-            w, h = t.get("size", [0, 0])
-            return coerce_int(w), coerce_int(h)
-        if "alias_of" in t:
-            return get_size(str(t["alias_of"]), seen)
-        return 0, 0
-
-    def get_type(g: str, seen=None) -> str:
-        if seen is None:
-            seen = set()
-        if g in seen:
-            return ""
-        seen.add(g)
-        t = templates.get(g, {})
-        if "type" in t and t["type"]:
-            return str(t["type"])
-        if "alias_of" in t:
-            return get_type(str(t["alias_of"]), seen)
-        return ""
-
-    def get_layout(g: str, seen=None) -> Dict[str, Any]:
-        if seen is None:
-            seen = set()
-        if g in seen:
-            return {}
-        seen.add(g)
-        t = templates.get(g, {})
-        if "layout" in t and isinstance(t["layout"], dict):
-            return dict(t["layout"])
-        if "alias_of" in t:
-            return get_layout(str(t["alias_of"]), seen)
-        return {}
-
-    for g in list(templates.keys()):
-        w, h = get_size(g)
-        typ = get_type(g)
-        layout = get_layout(g)
-        resolved[g] = {"size": [w, h], "type": typ, "layout": layout}
-    return resolved
+from _utils import clamp_top_left, coerce_int, resolve_templates
 
 def _load_templated_json(coord_path: str) -> Optional[Dict[str, Any]]:
     try:
@@ -118,7 +52,7 @@ class ZoneProject:
     @property
     def templates_resolved(self) -> Dict[str, Any]:
         # recalcul léger à la demande (ou fais-le sur set)
-        return _resolve_templates(self.templates)
+        return resolve_templates(self.templates)
 
     def get_group_size(self, group: str) -> Tuple[int, int]:
         size = self.templates_resolved.get(group, {}).get("size", [60, 40])

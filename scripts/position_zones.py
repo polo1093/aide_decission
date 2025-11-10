@@ -26,30 +26,11 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 
 from objet.game import Game
+from _utils import clamp_top_left, coerce_int, resolve_templates
 
 APP_TITLE = "Zone Editor (CustomTkinter) — Multi‑jeux"
 MAX_CANVAS_W = 1280
 MAX_CANVAS_H = 800
-
-# ---------------------------------------------------------------
-# Utilitaires
-# ---------------------------------------------------------------
-
-def _coerce_int(v: Any, default: int = 0) -> int:
-    try:
-        return int(round(float(v)))
-    except Exception:
-        return default
-
-
-def _clamp_top_left(x: int, y: int, w: int, h: int, W: int, H: int) -> Tuple[int, int]:
-    """Contraint (x,y) pour que le rectangle [x,x+w]x[y,y+h] reste dans [0,W]x[0,H]."""
-    if W <= 0 or H <= 0:
-        return x, y
-    x = max(0, min(x, max(0, W - w)))
-    y = max(0, min(y, max(0, H - h)))
-    return x, y
-
 
 # ---------------------------------------------------------------
 # Chargeurs JSON
@@ -64,32 +45,6 @@ def _load_templated(path: str) -> Optional[Dict[str, Any]]:
     if isinstance(data, dict) and "templates" in data and "regions" in data:
         return data
     return None
-
-
-def _resolve_templates(templates: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Résout alias_of → retourne dict {group: {size:[w,h], type:str}}."""
-    resolved: Dict[str, Dict[str, Any]] = {}
-
-    def get_size(g: str, seen=None) -> Tuple[int, int]:
-        if seen is None:
-            seen = set()
-        if g in seen:  # boucle
-            return 0, 0
-        seen.add(g)
-        t = templates.get(g, {})
-        if "size" in t:
-            w, h = t.get("size", [0, 0])
-            return _coerce_int(w), _coerce_int(h)
-        if "alias_of" in t:
-            return get_size(str(t["alias_of"]))
-        return 0, 0
-
-    for g in list(templates.keys()):
-        w, h = get_size(g)
-        parent = templates[g].get("alias_of")
-        typ = templates[g].get("type", templates.get(parent, {}).get("type", ""))
-        resolved[g] = {"size": [w, h], "type": typ}
-    return resolved
 
 
 # ---------------------------------------------------------------
@@ -336,7 +291,7 @@ class ZoneEditorCTK:
         if templated:
             self.table_capture.update(templated.get("table_capture", {}))
             self.templates.update(templated.get("templates", {}))
-            self.templates_resolved = _resolve_templates(self.templates)
+            self.templates_resolved = resolve_templates(self.templates)
             reg = templated.get("regions", {})
             for key, r in reg.items():
                 group = r.get("group", "")
@@ -349,7 +304,7 @@ class ZoneEditorCTK:
             # pas de JSON → base minimale
             self.templates.clear()
             self.templates.update({"action_button": {"size": [165, 70], "type": "texte"}})
-            self.templates_resolved = _resolve_templates(self.templates)
+            self.templates_resolved = resolve_templates(self.templates)
             self.status.configure(text=f"{game_name}: image chargée (coordinates.json absent)")
 
         self._enable_ui_after_load()
@@ -406,8 +361,8 @@ class ZoneEditorCTK:
             label = r.get("label", key)
             tl = r.get("top_left", [0, 0])
             size = self.templates_resolved.get(group, {}).get("size", [60, 40])
-            w, h = _coerce_int(size[0], 60), _coerce_int(size[1], 40)
-            x, y = _clamp_top_left(_coerce_int(tl[0]), _coerce_int(tl[1]), w, h, W, H)
+            w, h = coerce_int(size[0], 60), coerce_int(size[1], 40)
+            x, y = clamp_top_left(coerce_int(tl[0]), coerce_int(tl[1]), w, h, W, H)
             r["top_left"] = [x, y]
             dx0, dy0 = int(x * s), int(y * s)
             dx1, dy1 = int((x + w) * s), int((y + h) * s)
@@ -484,7 +439,7 @@ class ZoneEditorCTK:
         if group not in self.templates_resolved:
             # créer un groupe par défaut si besoin
             self.templates[group] = {"size": [60, 40], "type": "mix"}
-            self.templates_resolved = _resolve_templates(self.templates)
+            self.templates_resolved = resolve_templates(self.templates)
             self._populate_group_menu_keep_current()
         self.group_var.set(group)
         tl = r.get("top_left", [0, 0])
@@ -534,7 +489,7 @@ class ZoneEditorCTK:
         W, H = self.img_pil_original.size
         x = int(event.x / s) - self.drag_offset[0]
         y = int(event.y / s) - self.drag_offset[1]
-        x, y = _clamp_top_left(x, y, w, h, W, H)
+        x, y = clamp_top_left(x, y, w, h, W, H)
         r["top_left"] = [x, y]
         dx0, dy0 = int(x * s), int(y * s)
         dx1, dy1 = int((x + w) * s), int((y + h) * s)
@@ -576,7 +531,7 @@ class ZoneEditorCTK:
             # crée le groupe s'il n'existe pas
             self.templates[g] = {"size": [60, 40], "type": "mix"}
         r["group"] = g
-        self.templates_resolved = _resolve_templates(self.templates)
+        self.templates_resolved = resolve_templates(self.templates)
 
         # Position
         try:
@@ -585,7 +540,7 @@ class ZoneEditorCTK:
             x, y = r.get("top_left", [0, 0])
         W, H = self.img_pil_original.size if self.img_pil_original else (0, 0)
         gw, gh = self.templates_resolved.get(r["group"], {}).get("size", [60, 40])
-        x, y = _clamp_top_left(x, y, gw, gh, W, H)
+        x, y = clamp_top_left(x, y, gw, gh, W, H)
         r["top_left"] = [x, y]
 
         # Taille de GROUPE (propagation)
@@ -593,7 +548,7 @@ class ZoneEditorCTK:
             nw = int(self.entry_w.get()); nh = int(self.entry_h.get())
             if nw > 0 and nh > 0:
                 self.templates[r["group"]] = {**self.templates.get(r["group"], {}), "size": [nw, nh]}
-                self.templates_resolved = _resolve_templates(self.templates)
+                self.templates_resolved = resolve_templates(self.templates)
         except Exception:
             pass
 
@@ -615,7 +570,7 @@ class ZoneEditorCTK:
             return
         W, H = self.img_pil_original.size
         gw, gh = self.templates_resolved[g]["size"]
-        x, y = _clamp_top_left(W // 2 - gw // 2, H // 2 - gh // 2, gw, gh, W, H)
+        x, y = clamp_top_left(W // 2 - gw // 2, H // 2 - gh // 2, gw, gh, W, H)
         base = f"{g}_"; idx = 1
         while f"{base}{idx}" in self.regions:
             idx += 1
