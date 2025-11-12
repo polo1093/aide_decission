@@ -1,9 +1,26 @@
 # aide de décision
 
+Plan 
 
 
-Plan (reformulé)
+  Game
+    Table
+      scan_table
+          (add fond et pot scan en OCR)
+      Card_state 
+          Card ( regrouper toutes les class de entities card en une )
+              
+      Buttons_state
+          Button
+      Player_state 
+          Player
+    Party
+      état ...
 
+    Décission ...
+
+  Controlleur tjrs utile?
+  afficheur launch.py avec thinker
 
 
 

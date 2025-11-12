@@ -101,8 +101,22 @@ def convert_card(string_carte: Optional[str]) -> Optional[Card]:
     return Card(value, suit)
 
 
+    class card_scan:
+        def __init__(self):
+        
+        
+        
+        utilise  les fonctions dans scripts pour retourner les valeurs des cartes
+        
+        
+
+
+
+
 __all__ = [
     "CardObservation",
     "CardSlot",
     "convert_card",
 ]
+
+
