@@ -20,12 +20,12 @@ PUML manuelle
   3.afficheur launch.py avec thinker
 
 flowchart LR
-  A[config/coordinates.json] --> B[Capture/Screen Grab]
-  B --> C[Crop & Pré-traitement]
-  C --> D[OCR / Matching]
-  D --> E[État du jeu]
-  E --> F[Moteur d'aide à la décision]
-  F --> G[Sorties: console/UI/overlay]
+  A[config/coordinates.json] --> B[Capture/Screen Grab] fait
+  B --> C[Crop & Pré-traitement] fait
+  C --> D[OCR / Matching] en cours
+  D --> E[État du jeu] à faire
+  E --> F[Moteur d'aide à la décision] à faire
+  F --> G[Sorties: console/UI/overlay] en cours
 
 
 
@@ -41,17 +41,7 @@ To do list
 2.
 
 
-Étape 4 : Moteur d’aide à la décision
 
-Interpréter l’état du jeu : à partir des cartes reconnues (ex: cartes communes et main du joueur dans une partie de poker), construire la représentation de l’état de la partie. Intégrer d’autres informations si nécessaire (mises, positions des joueurs, etc. – éventuel pour d’autres jeux).
-
-Calculer les probabilités ou scores : implémenter la logique de calcul (par ex. pour le poker, évaluer la force de la main, calculer les probabilités de gagner, etc., ou toute métrique utile à la décision pour le jeu en question).
-
-Générer une recommandation : en se basant sur ces calculs, formuler une suggestion d’action optimale ou une aide à la décision (par ex. « relancer », « se coucher » pour le poker, ou toute recommandation spécifique au jeu).
-
-Interface de sortie : Prévoir comment afficher ou retourner cette aide à la décision à l’utilisateur (console, interface graphique, overlay sur le jeu, etc.).
-
-Tests: Valider le moteur de décision avec des scénarios connus (par ex. mains de poker prédéfinies où l’issue est connue, pour vérifier que l’évaluation et la recommandation correspondent aux attentes).
 
 
 
