@@ -1,34 +1,39 @@
 # aide de décision
 
-Plan 
+PUML manuelle 
+  1.Game
+    1.1.Table
+      1.1.1.scan_table
+          1.1.1.1.(add fond et pot scan en OCR)
+      1.1.2.Card_state 
+          1.1.2.1Card ( regrouper toutes les class de entities card en une )
+      1.1.3.Buttons_state
+          1.1.3.1.Button
+      1.1.4.Player_state 
+          1.1.4.1.Player
+    1.2.Party
+      1.2.1.état ...
+
+    1.3.Décission ...
+
+  2.Controlleur tjrs utile?
+  3.afficheur launch.py avec thinker
+
+flowchart LR
+  A[config/coordinates.json] --> B[Capture/Screen Grab]
+  B --> C[Crop & Pré-traitement]
+  C --> D[OCR / Matching]
+  D --> E[État du jeu]
+  E --> F[Moteur d'aide à la décision]
+  F --> G[Sorties: console/UI/overlay]
 
 
-  Game
-    Table
-      scan_table
-          (add fond et pot scan en OCR)
-      Card_state 
-          Card ( regrouper toutes les class de entities card en une )
-              
-      Buttons_state
-          Button
-      Player_state 
-          Player
-    Party
-      état ...
-
-    Décission ...
-
-  Controlleur tjrs utile?
-  afficheur launch.py avec thinker
 
 
 
 To do list 
 
-quand je scan
-refresh timer
-def 
+
 
 
 1.faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards, pr une configuratiion rapides
@@ -68,16 +73,15 @@ d'environnement `TESSERACT_CMD` avec le chemin complet vers `tesseract` :
 export TESSERACT_CMD=/usr/bin/tesseract
 ```
 
-## Utilisation
-
-Lancer l'interface de démonstration :
-
+## Quickstart
 ```bash
-python test.py
-```
-
-Une fenêtre permet de lancer le scan de la table. Les informations détectées s'affichent en temps réel et le bot peut cliquer sur l'action proposée.
-
+git clone https://github.com/polo1093/aide_decission.git
+cd aide_decission
+python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+# Installez Tesseract puis définissez TESSERACT_CMD si nécessaire
+# Windows: setx TESSERACT_CMD "C:\Program Files\Tesseract-OCR\tesseract.exe"
+python launch.py --profile demo                 # Exemple d’exécution
 ## Modifier les coordonnées
 
 Toutes les positions à l'écran sont définies dans le fichier `coordinates.json` à la racine du projet. Chaque entrée contient les coordonnées relatives d'une région sous la forme `[x1, y1, x2, y2]`. Modifiez ces valeurs pour adapter le bot à une nouvelle résolution ou interface, puis relancez le programme pour appliquer les changements.
@@ -127,5 +131,5 @@ entre tous les outils.
 
 ## Avertissement
 
-Ce projet est fourni à titre expérimental. L'utilisation d'un bot sur des plateformes de poker en ligne peut être interdite par leurs conditions d'utilisation. L'auteur décline toute responsabilité en cas d'usage inapproprié.
+Ce projet est fourni à titre expérimental.
 
