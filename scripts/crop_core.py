@@ -31,6 +31,35 @@ def find_crop_top_left_by_matching(screenshot_img: Image.Image, crop_img: Image.
     _, _, _, loc = cv2.minMaxLoc(result)
     return int(loc[0]), int(loc[1])
 
+
+def _match_top_left_and_score(
+    src_img: Image.Image,
+    tmpl_img: Image.Image,
+    method: int = cv2.TM_CCOEFF_NORMED,
+) -> Tuple[Tuple[int, int], float]:
+    """Retourne ((x,y), score) du meilleur match de tmpl_img dans src_img.
+    Le score est normalisé: plus haut = meilleur, quel que soit le method.
+    """
+    src_gray = cv2.cvtColor(np.array(src_img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    tpl_gray = cv2.cvtColor(np.array(tmpl_img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    res = cv2.matchTemplate(src_gray, tpl_gray, method)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+    if method in (cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED):
+        score = 1.0 - float(min_val)
+        loc = min_loc
+    else:
+        score = float(max_val)
+        loc = max_loc
+    return (int(loc[0]), int(loc[1])), float(score)
+
+
+# ---------- Paramètres internes (non exposés) ----------
+_REF_METHOD = cv2.TM_CCOEFF_NORMED
+_REF_THRESHOLD = 0.80          # seuil de détection plein écran
+_INSIDE_THRESHOLD = 0.80       # seuil de détection dans le crop
+_GEOM_TOL = 1                  # tolérance géométrique intra-crop (px)
+
+
 # ---------- Géométrie ----------
 
 def _clamp_box(box: Tuple[int,int,int,int], size: Tuple[int,int]) -> Tuple[int,int,int,int]:
@@ -54,6 +83,7 @@ def _clamp_origin(x0: int, y0: int, size: Tuple[int,int], canvas: Tuple[int,int]
     y0 = max(0, min(y0, max(0, H - h)))
     return x0, y0
 
+
 # ---------- Crop runtime (mémoire) ----------
 
 def crop_from_size_and_offset(
@@ -61,14 +91,17 @@ def crop_from_size_and_offset(
     size: Tuple[int,int],
     ref_offset: Tuple[int,int],  # offset du point REF vers le coin haut-gauche de la fenêtre
     *,
-    reference_img: Optional[Image.Image] = None,
-    reference_point: Optional[Tuple[int,int]] = None,
-) -> Tuple[Image.Image, Tuple[int,int]]:
+    reference_img: Image.Image,  # requis
+) -> Tuple[Optional[Image.Image], Optional[Tuple[int,int]]]:
     """Retourne (crop, (x0,y0)).
 
+    Comportement tolérant : si l'ancre n'est pas détectée sur le plein écran OU
+    si elle n'est pas validée *dans* le crop (score/tolérance internes), retourne (None, None).
+
     - `size` = (W,H) de la fenêtre à extraire.
-    - `ref_offset` = (ox,oy) = position RELATIVE du gabarit `me` *dans* la fenêtre (distance depuis le coin haut-gauche de la fenêtre jusqu'au coin haut-gauche de `me`).
-    - `reference_point` ou `reference_img` sert à retrouver la position absolue de `me` dans le screenshot.
+    - `ref_offset` = (ox,oy) = position RELATIVE du gabarit `reference_img` *dans* la fenêtre
+      (distance depuis le coin haut-gauche de la fenêtre jusqu'au coin haut-gauche de `reference_img`).
+    - `reference_img` sert à retrouver la position absolue de l'ancre dans le screenshot.
 
     Coin du crop = REF_ABS - ref_offset. Clamp si nécessaire.
     """
@@ -77,17 +110,35 @@ def crop_from_size_and_offset(
     if W <= 0 or H <= 0:
         raise ValueError("Invalid size; width/height must be > 0")
 
-    if reference_point is None:
-        if reference_img is None:
-            raise ValueError("Provide reference_point or reference_img")
-        reference_point = find_ref_point(screenshot_img, reference_img)
+    # 1) Détection de l'ancre sur le screenshot
+    (rx, ry), score = _match_top_left_and_score(screenshot_img, reference_img, method=_REF_METHOD)
+    if score < _REF_THRESHOLD:
+        return None, None
 
-    rx, ry = int(reference_point[0]), int(reference_point[1])
+    # 2) Calcul du crop (avec clamp)
     x0_raw, y0_raw = rx - ox, ry - oy
     x0, y0 = _clamp_origin(x0_raw, y0_raw, (W, H), screenshot_img.size)
     x1, y1 = x0 + W, y0 + H
     crop = screenshot_img.crop((x0, y0, x1, y1))
+
+    # 3) Validation intra-crop (obligatoire, non paramétrable)
+    ref_w, ref_h = reference_img.size
+    ax_exp, ay_exp = rx - x0, ry - y0  # position attendue de l’ancre dans le crop
+
+    # L’ancre doit tenir entièrement dans le crop
+    if not (0 <= ax_exp <= W - ref_w and 0 <= ay_exp <= H - ref_h):
+        return None, None
+
+    # Matching dans le crop
+    (ax_found, ay_found), inside_score = _match_top_left_and_score(crop, reference_img, method=_REF_METHOD)
+    ok_score = inside_score >= _INSIDE_THRESHOLD
+    ok_geom = (abs(ax_found - ax_exp) <= _GEOM_TOL) and (abs(ay_found - ay_exp) <= _GEOM_TOL)
+
+    if not (ok_score and ok_geom):
+        return None, None
+
     return crop, (x0, y0)
+
 
 # ---------- Comparaison / Vérif ----------
 
@@ -102,28 +153,33 @@ def _compare_images(img_a: Image.Image, img_b: Image.Image, pix_tol: int = 0) ->
     return (max_diff <= int(pix_tol)), {"max_diff": float(max_diff), "mean_diff": mean_diff}
 
 
+
 def verify_geom(
     screenshot_img: Image.Image,
     expected_img: Image.Image,
     size: Tuple[int,int],
     ref_offset: Tuple[int,int],
     *,
-    reference_img: Optional[Image.Image] = None,
-    reference_point: Optional[Tuple[int,int]] = None,
+    reference_img: Image.Image,
     geom_tol: int = 1,
     pix_tol: int = 0,
 ) -> Tuple[bool, Dict[str, float]]:
     """Vérifie l'ALIGNEMENT géométrique:
-       - prédit (px,py) via (size, ref_offset, ref_point)
+       - prédit (px,py) via (size, ref_offset, ancre)
        - mesure (mx,my) en matchant expected_img dans screenshot
        OK si |px-mx|<=geom_tol et |py-my|<=geom_tol.
        Ajoute stats pixel (max_diff/mean_diff) à titre informatif.
     """
-    # prédit via runtime
-    crop_pred, (px, py) = crop_from_size_and_offset(
-        screenshot_img, size, ref_offset, reference_img=reference_img, reference_point=reference_point
+    # 1) prédiction via runtime (tolérant)
+    crop_pred, origin = crop_from_size_and_offset(
+        screenshot_img, size, ref_offset, reference_img=reference_img
     )
-    # mesure via matching
+    if crop_pred is None or origin is None:
+        return False, {"reason": "anchor_not_found_or_invalid"}
+
+    px, py = origin
+
+    # 2) mesure via matching
     mx, my = find_crop_top_left_by_matching(screenshot_img, expected_img)
 
     dx, dy = int(px - mx), int(py - my)
@@ -132,6 +188,7 @@ def verify_geom(
     ok_pix, pix_stats = _compare_images(crop_pred, expected_img, pix_tol)
     stats = {"pred_top_left": (px, py), "match_top_left": (mx, my), "dx": float(dx), "dy": float(dy), **pix_stats}
     return ok_geom, stats
+
 
 # ---------- Inference offset ----------
 
@@ -152,6 +209,7 @@ def infer_size_and_offset(
     rx, ry = find_ref_point(screenshot_img, reference_img)
     ref_offset = (rx - cx, ry - cy)
     return size, ref_offset, (cx, cy), (rx, ry)
+
 
 # ---------- JSON helpers ----------
 
@@ -299,7 +357,6 @@ def main(argv: Optional[list] = None) -> int:
         ok, stats = verify_geom(
             scr, exp, size, ref_offset,
             reference_img=ref,
-            reference_point=None,
             geom_tol=int(args.geom_tol),
             pix_tol=int(args.pix_tol),
         )
@@ -308,15 +365,17 @@ def main(argv: Optional[list] = None) -> int:
         if ok:
             ok_count += 1
 
-    # 4) Sauvegarde debug systématique
+    # 4) Sauvegarde debug (si calcul possible)
     crop, origin = crop_from_size_and_offset(scr, size, ref_offset, reference_img=ref)
     debug_path = _with_debug_suffix(expected_path)
-    _save_any(debug_path, crop)
-    print("Wrote computed crop (debug):", debug_path, "origin:", origin)
-
-    if args.write_crop:
-        _save_any(Path(args.write_crop), crop)
-        print("Wrote computed crop (custom):", args.write_crop)
+    if crop is not None and origin is not None:
+        _save_any(debug_path, crop)
+        print("Wrote computed crop (debug):", debug_path, "origin:", origin)
+        if args.write_crop:
+            _save_any(Path(args.write_crop), crop)
+            print("Wrote computed crop (custom):", args.write_crop)
+    else:
+        print("No debug crop written: anchor not found/validated.")
 
     print(f"Summary: {ok_count}/{args.runs} OK (geom_tol={args.geom_tol}, pix_tol={args.pix_tol})")
     print("Game capture context:", game.table.captures.table_capture)

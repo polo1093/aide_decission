@@ -9,6 +9,11 @@ Plan (reformulé)
 
 To do list 
 
+quand je scan
+refresh timer
+def 
+
+
 1.faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards, pr une configuratiion rapides
 
 2.

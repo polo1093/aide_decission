@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 from objet.entities.card import CardObservation
 from objet.state import ButtonsState, CardsState, CaptureState, extract_scan_value
+from objet.scanner.scan import ScanTable
 
 
 @dataclass
@@ -16,8 +17,21 @@ class Table:
     buttons: ButtonsState = field(default_factory=ButtonsState)
     captures: CaptureState = field(default_factory=CaptureState)
     players: list[Any] = field(default_factory=list)
+    scan : ScanTable    = field(default_factory=ScanTable)
+
+
+    def launch_scan(self):
+        self.scan.test_scan()
+        self.apply_scan("""Mapping  [str, Any]"""?)
+        
+        
+        
+        
 
     def apply_scan(self, scan_table: Mapping[str, Any]) -> None:
+        
+        if self.scan.find_table
+        
         for i in range(1, 6):
             number_key = f"board_card_{i}_number"
             symbol_key = f"board_card_{i}_symbol"
@@ -76,28 +90,7 @@ class Table:
             },
         }
 
-    def suggest_action(
-        self,
-        *,
-        chance_win_x: Optional[float],
-        ev_calculator: Callable[[Optional[float], Optional[float]], Optional[float]],
-    ) -> Optional[str]:
-        max_gain = float("-inf")
-        best_button: Optional[str] = None
-        for name, btn in self.buttons.buttons.items():
-            if btn.value is not None and btn.name is not None:
-                gain = ev_calculator(chance_win_x, btn.value)
-            elif btn.name == "se coucher":
-                gain = 0.0
-            elif btn.name is not None:
-                gain = ev_calculator(chance_win_x, 0)
-            else:
-                gain = None
-            btn.gain = gain
-            if gain is not None and gain > max_gain:
-                max_gain = gain
-                best_button = name
-        return best_button
+   
 
 
 __all__ = ["Table"]
