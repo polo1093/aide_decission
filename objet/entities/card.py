@@ -47,9 +47,8 @@ class Card:
         suit: Optional[str],
         value_score: Optional[float] = None,
         suit_score: Optional[float] = None,
-        source: str = "scan",
     ) -> None:
-        """Applique une nouvelle observation et met à jour l'objet PokerCard."""
+        """Applique une nouvelle observation et met à jour ."""
         LOGGER.debug(
             "apply_observation(source=%s, value=%s, suit=%s, value_score=%s, suit_score=%s)",
             source,
@@ -153,7 +152,7 @@ if __name__ == "__main__":
 
     for idx, (val, suit) in enumerate(tests, start=1):
         c = Card()
-        c.apply_observation(value=val, suit=suit, source="manual-test")
+        c.apply_observation(value=val, suit=suit)
         print(f"Test {idx} : value={val!r}, suit={suit!r}")
         print(f"  formatted   = {c.formatted()!r}")
         print(f"  poker_card  = {c.poker_card!r}")

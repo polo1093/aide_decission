@@ -64,14 +64,15 @@ class ScanTable():
 
      
      
-    def scan_carte(self, image_crop, position):
+    def scan_carte(self,  position):
         """
         Trouve la carte dans un crop donné.
         - image_crop : numpy array (image) contenant la table ou la zone globale.
         - position : tuple (x, y, w, h) décrivant la position de la carte dans image_crop.
         Retourne (valeur_carte, couleur_carte) ou (None, None) si aucune carte détectée.
+        #j'aimerai rajouter en sortie la confiance des reconnaissances 
         """
-        if image_crop is None or position is None:
+        if  self.screen_crop is None or position is None:
             return None, None
 
         try:
@@ -81,7 +82,7 @@ class ScanTable():
             return None, None
 
         pad = 3  # 3 pixels de marge autour de la carte
-        h_img, w_img = image_crop.shape[:2]
+        h_img, w_img = self.screen_crop.shape[:2]
 
         x0 = max(0, int(x - pad))
         y0 = max(0, int(y - pad))
@@ -91,7 +92,7 @@ class ScanTable():
         if x0 >= x1 or y0 >= y1:
             return None, None
 
-        image_card = image_crop[y0:y1, x0:x1]
+        image_card = self.screen_crop[y0:y1, x0:x1]
 
         # Convertir en gris si nécessaire (les utilitaires peuvent attendre du gris)
         if image_card.ndim == 3:
