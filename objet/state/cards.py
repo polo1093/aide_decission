@@ -1,58 +1,108 @@
-"""Gestion de l'état des cartes de la table."""
+# objet/state/cards_state.py
+"""Gestion de l'état des cartes de la table.
+
+- 5 cartes de board
+- 2 cartes pour le héros
+- Coordonnées injectées à la déclaration à partir de coordinates.json.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+from objet.entities.card import Card
+from scripts._utils import Region, load_coordinates
+
+CardBox = Tuple[int, int, int, int]
+
+# Même défaut que dans _utils.load_coordinates
+DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 
-from objet.entities.card import CardObservation, CardSlot
+def _card_box_from_regions(regions: Dict[str, Region], base_key: str) -> Optional[CardBox]:
+    """
+    Calcule le bounding box global pour une carte à partir de :
+
+      - <base_key>_number
+      - <base_key>_symbol
+
+    en fusionnant les 2 rectangles (valeur + symbole).
+    """
+    keys = [f"{base_key}_number", f"{base_key}_symbol"]
+    boxes: List[CardBox] = []
+
+    for key in keys:
+        region = regions.get(key)
+        if region is None:
+            continue
+        x, y = region.top_left
+        w, h = region.size
+        boxes.append((x, y, x + w, y + h))
+
+    if not boxes:
+        return None
+
+    x1 = min(b[0] for b in boxes)
+    y1 = min(b[1] for b in boxes)
+    x2 = max(b[2] for b in boxes)
+    y2 = max(b[3] for b in boxes)
+    return x1, y1, x2, y2
 
 
 @dataclass
 class CardsState:
-    """Regroupe les cartes du board et du joueur."""
+    """
+    Regroupe les cartes du board et du joueur, avec coordonnées injectées.
 
-    board: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(5)])
-    me: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(2)])
-    observations: Dict[str, CardObservation] = field(default_factory=dict)
+    - `coord_path` permet de surcharger le fichier de coordonnées si besoin
+      (par défaut : config/PMU/coordinates.json).
+    - Si `board` / `me` ne sont pas fournis, ils sont construits automatiquement
+      à partir de `load_coordinates(coord_path)`.
+    """
 
-    def apply_observation(self, base_key: str, observation: CardObservation) -> None:
-        self.observations[base_key] = observation
-        slot = self._slot_for_base_key(base_key)
-        if slot:
-            slot.apply(observation)
+    coord_path: Path | str = DEFAULT_COORD_PATH
+    board: List[Card] = field(default_factory=list)
+    me: List[Card] = field(default_factory=list)
 
-    def _slot_for_base_key(self, base_key: str) -> Optional[CardSlot]:
-        if base_key.startswith("player_card_"):
-            try:
-                idx = int(base_key.split("_")[-1]) - 1
-            except (ValueError, IndexError):
-                return None
-            if 0 <= idx < len(self.me):
-                return self.me[idx]
-        if base_key.startswith("board_card_"):
-            try:
-                idx = int(base_key.split("_")[-1]) - 1
-            except (ValueError, IndexError):
-                return None
-            if 0 <= idx < len(self.board):
-                return self.board[idx]
-        return None
+    def __post_init__(self) -> None:
+        # Cas où on injecte manuellement des cartes : on ne touche à rien.
+        if self.board and self.me:
+            return
+
+        regions, _, _ = load_coordinates(self.coord_path)
+
+        if not self.board:
+            self.board = [
+                Card(card_coordinates=_card_box_from_regions(regions, f"board_card_{i}"))
+                for i in range(1, 6)
+            ]
+
+        if not self.me:
+            self.me = [
+                Card(card_coordinates=_card_box_from_regions(regions, f"player_card_{i}"))
+                for i in range(1, 3)
+            ]
+
+    # --- API pratique pour le reste du code ----------------------------------
 
     def me_cards(self) -> List[Card]:
-        return [slot.card for slot in self.me if slot.card is not None]
+        """Retourne les entités Card du joueur (avec value/suit/poker_card)."""
+        return self.me
 
     def board_cards(self) -> List[Card]:
-        return [slot.card for slot in self.board if slot.card is not None]
+        """Retourne les entités Card du board."""
+        return self.board
 
     def as_strings(self) -> Dict[str, List[str]]:
-        def _format(slots: Iterable[CardSlot]) -> List[str]:
+        """
+        Fonction utilitaire de debug : renvoie les cartes sous forme '10♥', 'A♠', etc.
+        """
+        def _format(cards: List[Card]) -> List[str]:
             out: List[str] = []
-            for slot in slots:
-                if slot.observation is None:
-                    out.append("?")
-                else:
-                    out.append(slot.observation.formatted() or "?")
+            for c in cards:
+                out.append(c.formatted() or "?")
             return out
 
         return {

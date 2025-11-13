@@ -14,7 +14,6 @@ class Controller():
         
         self.game_stat = {}
         self.game = Game()
-        self.scan = ScanTable()
         self.click = Cliqueur()
     def main(self):
         if self.scan.scan():
@@ -65,7 +64,7 @@ class Controller():
         chance_win_x = round_sig(chance_win_x)
 
         # Informations sur les cartes du joueur
-        me_cards = [str(card) for card in self.game.cards.player_cards()]
+        me_cards = [str(card) for card in self.game.cards.me_cards()]
         me_cards_str = ', '.join(me_cards)
 
         # Informations sur le board
@@ -109,7 +108,5 @@ class Controller():
             f"Argent des joueurs:\n{player_money_str}"
         )
 
-    def draw(self):
-        if self.scan.scan():
-            self.scan.show_debug_image()
+
 

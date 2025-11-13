@@ -151,26 +151,90 @@ def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping
     )
 
 
-def load_coordinates(path: Path | str) -> Tuple[Dict[str, Region], Dict[str, Dict[str, Any]], Dict[str, Any]]:
-    """Load a coordinates.json file.
+ scripts/_utils.py
+from __future__ import annotations
 
-    Returns ``(regions, templates_resolved, table_capture)`` where ``regions``
-    maps keys to :class:`Region` instances.
+from dataclasses import dataclass, field
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
+
+from PIL import Image
+
+__all__ = [
+    "Region",
+    "coerce_int",
+    "clamp_bbox",
+    "clamp_top_left",
+    "resolve_templates",
+    "load_coordinates",
+    "extract_patch",
+    "extract_region_images",
+]
+
+
+@dataclass(frozen=True)
+class Region:
+    """Simple container describing a rectangular capture zone."""
+
+    key: str
+    group: str
+    top_left: Tuple[int, int]
+    size: Tuple[int, int]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> Dict[str, Any]:
+        """Return the JSON-compatible representation of the region."""
+        payload = {"group": self.group, "top_left": list(self.top_left)}
+        payload.update(self.meta)
+        return payload
+
+
+# --- cache coordinates.json en mémoire ---------------------------------------
+
+# Chemin par défaut : racine/config/PMU/coordinates.json
+DEFAULT_COORDINATES_PATH = Path("config/PMU/coordinates.json")
+
+_COORDINATES_CACHE: Dict[Path, Tuple[Dict[str, "Region"], Dict[str, Dict[str, Any]], Dict[str, Any]]] = {}
+
+
+def load_coordinates(
+    path: Path | str = DEFAULT_COORDINATES_PATH,
+) -> Tuple[Dict[str, "Region"], Dict[str, Dict[str, Any]], Dict[str, Any]]:
     """
+    Load a coordinates.json file.
 
+    Retourne ``(regions, templates_resolved, table_capture)`` où ``regions``
+    mappe les clés vers des :class:`Region`.
+
+    - *path* est optionnel, par défaut `config/PMU/coordinates.json`.
+    - Les résultats sont mis en cache par chemin absolu pour éviter
+      de rouvrir et reparser le JSON à chaque appel.
+    """
     coord_path = Path(path)
+    key = coord_path.resolve()
+
+    # 1) cache mémoire
+    cached = _COORDINATES_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    # 2) chargement disque
     with coord_path.open("r", encoding="utf-8") as fh:
         payload: Dict[str, Any] = json.load(fh)
 
     templates = payload.get("templates", {})
     resolved = resolve_templates(templates)
     raw_regions = payload.get("regions", {})
-    regions = {
-        key: _normalise_region_entry(key, raw, resolved)
-        for key, raw in raw_regions.items()
+    regions: Dict[str, Region] = {
+        r_key: _normalise_region_entry(r_key, raw, resolved)
+        for r_key, raw in raw_regions.items()
     }
     table_capture = payload.get("table_capture", {})
-    return regions, resolved, table_capture
+
+    result = (regions, resolved, table_capture)
+    _COORDINATES_CACHE[key] = result
+    return result
 
 
 def extract_patch(image: Image.Image, top_left: Tuple[int, int], size: Tuple[int, int], pad: int = 4) -> Image.Image:
