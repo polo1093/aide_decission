@@ -382,12 +382,14 @@ def autodetect_classes() -> Tuple[Optional[type], Optional[type]]:
     Retourne (scanner_cls, game_cls), chacun pouvant être None.
     """
     candidates_scanner = [
+        "objet.scanner.scan:ScanTable",
         "objet.scan:ScanTable",
         "folder_tool.scan:ScanTable",
         "scan:ScanTable",
         "tool:ScanTable",
     ]
     candidates_game = [
+        "objet.services.game:Game",
         "objet.game:Game",
         "game:Game",
         "objet.Game:Game",
