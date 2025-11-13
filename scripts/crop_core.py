@@ -1,14 +1,20 @@
-# ==============================
-# crop_core.py — Coeur mémoire (size + ref_offset)
-# ==============================
-from __future__ import annotations
-from typing import Tuple, Dict, Optional
-from pathlib import Path
+import sys
 
-import numpy as np
-from PIL import Image
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
 import cv2
 import json
+import numpy as np
+from PIL import Image
+
+
+# ==============================
+# crop_core.py – Coeur mémoire (size + ref_offset)
+# ==============================
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 
 
@@ -341,7 +347,7 @@ def main(argv: Optional[list] = None) -> int:
         size_inf, ref_off_inf, crop_pos, ref_pos = infer_size_and_offset(scr, exp, ref)
         size = args.size if args.size else size_inf
         ref_offset = args.ref_offset if args.ref_offset else ref_off_inf
-        print("[infer] crop_top_left:", crop_pos, "ref_point:", ref_pos, "→ ref_offset:", ref_off_inf, "size:", size_inf)
+        print("[infer] crop_top_left:", crop_pos, "ref_point:", ref_pos, "-> ref_offset:", ref_off_inf, "size:", size_inf)
 
     # 2) Écrit JSON (taille + ref_offset)
     from __main__ import save_capture_json  # adjust import if split

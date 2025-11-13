@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from objet.state import CardsState   # ButtonsState, CaptureState, extract_scan_value
+from objet.state import ButtonsState, CaptureState, CardsState
 from objet.scanner.scan import ScanTable
 
 
@@ -20,8 +20,8 @@ class Table:
     """Réunit Les éléments à scanner et service de scan."""
 
     cards: CardsState = field(default_factory=CardsState)
-    # buttons: ButtonsState = field(default_factory=ButtonsState)
-    # captures: CaptureState = field(default_factory=CaptureState)
+    buttons: ButtonsState = field(default_factory=ButtonsState)
+    captures: CaptureState = field(default_factory=CaptureState)
     scan: ScanTable = field(default_factory=ScanTable)
     new_party_flag: bool = False
 
@@ -67,7 +67,7 @@ class Table:
     def New_Party(self)-> None:
         """Réinitialise l'état de la Table. et fait remonter un événement."""
         self.cards.reset()
-        new_party_flag = True
+        self.new_party_flag = True
         
 if __name__ == "__main__":
     # Petit stub de test local
