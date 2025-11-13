@@ -106,7 +106,7 @@ def convert_card(string_carte: Optional[str]) -> Optional[Card]:
         
         
         
-        utilise  les fonctions dans scripts pour retourner les valeurs des cartes
+         sachant qe 
         
         
 

@@ -60,6 +60,26 @@ class ScanTable():
     
       
 
+     
+     
+    def scan_carte(self, image crop globale,  postion de la carte) :
+        """ trouve la carte  """
+        # utilise  les fonctions dans le dossier scripts pour retourner les valeurs des cartes  "identify_card.py" et capture_cards.py
+        return carte_value, carte_suit
 
 
 
+    def scan_pot(self, image crop globale, position du pot):
+        return pot_value
+    
+    
+    def scan_player(self, image crop globale, position du joueur):  
+        scan_money_player
+        return player_state,player_active
+    
+    def scan_money_player(self, image crop globale, position de la money):
+        return money_value
+        
+    def scan_bouton(self, image crop globale, position du bouton):
+        # need ocr and traitement de texte
+        return money_value, texte

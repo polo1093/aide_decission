@@ -1,0 +1,59 @@
+@startuml
+title Architecture (Controleur / Domaine / Scan) – aide_decission
+top to bottom direction
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+hide methods
+
+' ===================== CONTROLEUR =====================
+package "Controleur" {
+  class AppController
+  AppController --> Game : tick()  ' Le contrôleur pilote le cycle de jeu
+}
+
+' ======================= DOMAINE ======================
+package "Domaine" {
+  class Game
+  class Table
+  class Buttons
+  class Bouton
+  class Main
+  class Carte
+  class Player
+
+  ' Hiérarchie métier
+  Game *-- Table
+  Table *-- Buttons
+  Buttons o-- Bouton
+  Table *-- Main
+  Main  *-- Carte
+  Table *-- Player
+}
+
+' ========================= SCAN =======================
+package "Scan" {
+  class ScanTable
+  class ScanCart
+  class ScanBouton
+}
+
+' ======== Appels depuis le domaine vers les scanners ========
+Table  --> ScanTable  : scan()
+Carte  --> ScanCart   : scan()
+Bouton --> ScanBouton : scan()
+
+' ======== Retour des scanners pour mise à jour du domaine ========
+ScanTable  --> Table  : maj()
+ScanCart   --> Carte  : maj()
+ScanBouton --> Bouton : maj()
+
+' (Facultatif) repères fichiers
+note right of ScanTable
+Table/scan_table
+end note
+
+note right of ScanCart
+scripts/identify_card.py\nscripts/capture_cards.py
+end note
+
+@enduml

@@ -1,23 +1,48 @@
 # aide de décision
 
 PUML manuelle 
-  1.Game
-    1.1.Table
-      1.1.1.scan_table
-          1.1.1.1.(add fond et pot scan en OCR)
-      1.1.2.Card_state 
-          1.1.2.1Card ( regrouper toutes les class de entities card en une )
-      1.1.3.Buttons_state
-          1.1.3.1.Button
-      1.1.4.Player_state 
-          1.1.4.1.Player
-    1.2.Party
-      1.2.1.état ...
 
-    1.3.Décission ...
+## Architecture globale
 
-  2.Controlleur tjrs utile?
-  3.afficheur launch.py avec thinker
+L’application est structurée autour d’un noyau `Game` qui orchestre l’état de la table, des joueurs, des boutons et des cartes, ainsi que la logique de partie et de décision.
+
+### 1. Game
+
+1.1. **Table**  
+&nbsp;&nbsp;&nbsp;&nbsp;1.1.1. `scan_table`  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1.1.1.1. (ajout du scan *fond* et *pot* en OCR)  
+&nbsp;&nbsp;&nbsp;&nbsp;1.1.2. `Card_state`  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1.1.2.1. `Card` (regrouper toutes les classes d’entities carte en une seule)  
+&nbsp;&nbsp;&nbsp;&nbsp;1.1.3. `Buttons_state`  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1.1.3.1. `Button`  
+&nbsp;&nbsp;&nbsp;&nbsp;1.1.4. `Player_state`  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1.1.4.1. `Player`
+
+1.2. **Party**  
+&nbsp;&nbsp;&nbsp;&nbsp;1.2.1. Gestion des états de la partie (phase de jeu, street, main en cours, historique, etc.)
+
+1.3. **Décission**  
+&nbsp;&nbsp;&nbsp;&nbsp;Moteur de décision basé sur l’état courant du `Game` / `Table` / `Player_state` (rules, heuristiques, modèle ML, etc.)
+
+### 2. Contrôleur
+
+Bloc à challenger :  
+- Question ouverte : **le contrôleur est-il toujours utile ?**  
+- Si conservé, il joue le rôle d’orchestrateur haut niveau :  
+  - création et cycle de vie de `Game`,  
+  - coordination entre `scan_table`, `Party` et `Décission`,  
+  - gestion des événements externes (UI, hotkeys, logs, etc.).
+
+### 3. Afficheur / `launch.py` + Thinker
+
+- `launch.py` sert de point d’entrée applicatif.  
+- Rôle principal :  
+  - initialiser le “thinker” (boucle principale d’analyse/decision),  
+  - câbler l’affichage (console, UI, overlay…) avec l’état de `Game` / `Table`,  
+  - piloter la fréquence des scans (`scan_table`) et des décisions.
+
+Ce schéma sert de référence pour l’implémentation et pour organiser les modules Python (fichiers et packages) selon cette hiérarchie logique.
+
 
 flowchart LR
   A[config/coordinates.json] --> B[Capture/Screen Grab] fait
@@ -122,4 +147,3 @@ entre tous les outils.
 ## Avertissement
 
 Ce projet est fourni à titre expérimental.
-
