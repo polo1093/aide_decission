@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional
 
-from pokereval.card import Card
 
 from objet.entities.card import CardObservation, CardSlot
 
@@ -14,7 +13,7 @@ class CardsState:
     """Regroupe les cartes du board et du joueur."""
 
     board: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(5)])
-    player: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(2)])
+    me: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(2)])
     observations: Dict[str, CardObservation] = field(default_factory=dict)
 
     def apply_observation(self, base_key: str, observation: CardObservation) -> None:
@@ -29,8 +28,8 @@ class CardsState:
                 idx = int(base_key.split("_")[-1]) - 1
             except (ValueError, IndexError):
                 return None
-            if 0 <= idx < len(self.player):
-                return self.player[idx]
+            if 0 <= idx < len(self.me):
+                return self.me[idx]
         if base_key.startswith("board_card_"):
             try:
                 idx = int(base_key.split("_")[-1]) - 1
@@ -40,8 +39,8 @@ class CardsState:
                 return self.board[idx]
         return None
 
-    def player_cards(self) -> List[Card]:
-        return [slot.card for slot in self.player if slot.card is not None]
+    def me_cards(self) -> List[Card]:
+        return [slot.card for slot in self.me if slot.card is not None]
 
     def board_cards(self) -> List[Card]:
         return [slot.card for slot in self.board if slot.card is not None]
@@ -57,7 +56,7 @@ class CardsState:
             return out
 
         return {
-            "player": _format(self.player),
+            "me": _format(self.me),
             "board": _format(self.board),
         }
 

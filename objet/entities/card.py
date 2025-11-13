@@ -1,11 +1,11 @@
-"""Entités liées aux cartes et utilitaires de conversion."""
+"""Entité unique représentant une carte scannée et sa normalisation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
 from typing import Optional
 
-from pokereval.card import Card
+from pokereval.card import Card as PokerCard
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,101 +22,96 @@ SUIT_ALIASES = {
 
 
 @dataclass
-class CardObservation:
-    """Observation d'une carte issue d'un scan ou d'une capture."""
-
-    value: Optional[str]
-    suit: Optional[str]
+class Card:
+    """Observation d'une carte et conversion vers l'objet PokerCard."""
+    card_coordinates: Optional[tuple[int, int, int, int]] = [0,0,0,0]
+    value: Optional[str] = None
+    suit: Optional[str] = None
     value_score: Optional[float] = None
     suit_score: Optional[float] = None
-    source: str = "scan"
+    poker_card: Optional[PokerCard] = None
 
     def formatted(self) -> Optional[str]:
+        """Chaîne human-readable de la forme '10♥' ou 'A♠', ou None si incomplet."""
         if not self.value or not self.suit:
             return None
-        suit = SUIT_ALIASES.get(self.suit, self.suit)
-        return f"{self.value}{suit}"
+        suit_sym = SUIT_ALIASES.get(self.suit, self.suit)
+        return f"{self.value}{suit_sym}"
 
+    
+    def scan(self) -> Optional[PokerCard]:
+        
+        
+        
+        
+        return self.value, self.suit
+    
+    
+    
+    def apply_observation(
+        self,
+        value: Optional[str],
+        suit: Optional[str],
+        value_score: Optional[float] = None,
+        suit_score: Optional[float] = None,
+        source: str = "scan",
+    ) -> None:
+        """Applique une nouvelle observation et met à jour l'objet PokerCard."""
+        self.value = value
+        self.suit = suit
+        self.value_score = value_score
+        self.suit_score = suit_score
+        formatted = self.formatted()
+        self.poker_card = self._convert_string_to_pokercard(formatted) if formatted else None
 
-@dataclass
-class CardSlot:
-    """Carte normalisée stockée dans l'état courant."""
+    @staticmethod
+    def _convert_string_to_pokercard(string_carte: Optional[str]) -> Optional[PokerCard]:
+        """Convertit une chaîne '10♥' / 'A♠' en PokerCard (ou None si invalide)."""
+        suit_dict = {"\u2666": 1, "\u2665": 2, "\u2660": 3, "\u2663": 4}
+        value_dict = {
+            "2": 2,
+            "3": 3,
+            "4": 4,
+            "5": 5,
+            "6": 6,
+            "7": 7,
+            "8": 8,
+            "9": 9,
+            "10": 10,
+            "J": 11,
+            "Q": 12,
+            "K": 13,
+            "A": 14,
+        }
 
-    observation: Optional[CardObservation] = None
-    card: Optional[Card] = None
-
-    def apply(self, observation: CardObservation) -> None:
-        self.observation = observation
-        formatted = observation.formatted()
-        self.card = convert_card(formatted) if formatted else None
-
-
-def convert_card(string_carte: Optional[str]) -> Optional[Card]:
-    """Convertit une chaîne représentant une carte de poker en objet :class:`Card`."""
-
-    suit_dict = {"\u2666": 1, "\u2665": 2, "\u2660": 3, "\u2663": 4}
-    value_dict = {
-        "2": 2,
-        "3": 3,
-        "4": 4,
-        "5": 5,
-        "6": 6,
-        "7": 7,
-        "8": 8,
-        "9": 9,
-        "10": 10,
-        "J": 11,
-        "Q": 12,
-        "K": 13,
-        "A": 14,
-    }
-
-    if string_carte in (None, "", "_"):
-        return None
-
-    string_carte = string_carte.strip()
-    if not string_carte:
-        return None
-
-    if string_carte[0] == "0":
-        message = (
-            f"Debug : La carte spécifiée '{string_carte}' est modifiée en '10{string_carte[1:]}' pour correction."
-        )
-        LOGGER.debug(message)
-        string_carte = "10" + string_carte[1:]
-
-    if len(string_carte) >= 2:
-        value_part = string_carte[:-1]
-        suit_part = string_carte[-1]
-        if value_part in value_dict and suit_part in suit_dict:
-            value = value_dict[value_part]
-            suit = suit_dict[suit_part]
-        else:
-            LOGGER.debug("Debug : La carte spécifiée '%s' n'est pas reconnue.", string_carte)
+        if string_carte in (None, "", "_"):
             return None
-    else:
-        LOGGER.debug("Debug : La carte spécifiée '%s' est trop courte.", string_carte)
-        return None
 
-    return Card(value, suit)
+        string_carte = string_carte.strip()
+        if not string_carte:
+            return None
 
+        # correction éventuelle si le scanner a renvoyé '0' au lieu de '10' en première position
+        if string_carte[0] == "0" and len(string_carte) >= 2:
+            LOGGER.debug(
+                "Debug : La carte spécifiée '%s' est modifiée en '10%s' pour correction.",
+                string_carte,
+            )
+            string_carte = "10" + string_carte[1:]
 
-    class card_scan:
-        def __init__(self):
-        
-        
-        
-         sachant qe 
-        
-        
+        if len(string_carte) >= 2:
+            value_part = string_carte[:-1]
+            suit_part = string_carte[-1]
+            if value_part in value_dict and suit_part in suit_dict:
+                value = value_dict[value_part]
+                suit = suit_dict[suit_part]
+                return PokerCard(value, suit)
+            else:
+                LOGGER.debug("Debug : La carte spécifiée '%s' n'est pas reconnue.", string_carte)
+                return None
+        else:
+            LOGGER.debug("Debug : La carte spécifiée '%s' est trop courte.", string_carte)
+            return None
 
-
-
-
-__all__ = [
-    "CardObservation",
-    "CardSlot",
-    "convert_card",
-]
-
-
+    
+__all__ = ["Card"]
