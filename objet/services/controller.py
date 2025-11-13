@@ -28,8 +28,8 @@ class Controller():
         
              # machine à état de la partie et save 
             # Todo
-        self.cpt += 1
-        print(f"Scan n°{self.cpt}")    
+        
+            
             
         if self.game.scan_to_data_table():
         
@@ -41,8 +41,8 @@ class Controller():
         
         
             return self.game_stat_to_string()
-        
-        return "don t find"
+        self.cpt += 1
+        return "don t find"+f"     Scan n°{self.cpt}"
         
 
     
@@ -127,24 +127,39 @@ if __name__ == "__main__":
     controller = Controller()
     result = controller.main()
     print(result)
+    
   # Sécurisation : on vérifie que table/scan/screen_array existent
     scan = getattr(controller.game.table, "scan", None)
     img = getattr(scan, "screen_array", None) if scan is not None else None
+  
 
-    if img is None:
-        print("Aucune image de screen disponible (screen_array est None).")
-    elif isinstance(img, PIL.Image.Image):
-        # Cas idéal : c’est déjà une Image PIL
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    img = controller.game.table.scan.screen_array  # BGR
+
+    if isinstance(img, np.ndarray):
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        Image.fromarray(rgb).show()
+    elif isinstance(img, Image.Image):
         img.show()
     else:
-        # On suppose un array numpy en BGR ou RGB
-        arr = np.asarray(img)
+        print("Type d'image inattendu:", type(img))
 
-        if arr.ndim == 2:  # gris
-            Image.fromarray(arr).show()
-        elif arr.ndim == 3 and arr.shape[2] == 3:
-            # Si tu penses qu’il vient d’OpenCV (BGR) → convertir en RGB pour PIL
-            arr_rgb = arr[:, :, ::-1]
-            Image.fromarray(arr_rgb).show()
+
+    
+
+
+    img = controller.game.table.scan.screen_crop  # BGR
+    if img is None:
+        print("Aucun crop de table disponible.")
+    else:
+        if isinstance(img, np.ndarray):
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            Image.fromarray(rgb).show()
+        elif isinstance(img, Image.Image):
+            img.show()
         else:
-            print(f"Format d’image inattendu: shape={arr.shape}")
+            print("Type d'image inattendu:", type(img))
+

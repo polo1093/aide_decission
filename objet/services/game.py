@@ -1,18 +1,19 @@
-"""Gestion centralisǸe de l'Ǹtat du jeu."""
+"""Gestion centralisée de l'état du jeu."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-import sys
-from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 from pokereval.hand_evaluator import HandEvaluator
 
+import sys
+from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import tool
 from objet.entities.card import Card
 from objet.services.table import Table
 from objet.state import ButtonsState, CardsState, CaptureState, MetricsState
@@ -24,102 +25,39 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class Game:
-    """Stocke l'Ǹtat courant de la table et calcule les dǸcisions."""
+    """Stocke l'état courant de la table et calcule les décisions."""
 
-    workflow: Optional[str] = None
-    raw_scan: Dict[str, Any] = field(default_factory=dict)
+    
     table: Table = field(default_factory=Table)
     metrics: MetricsState = field(default_factory=MetricsState)
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
 
-    @property
-    def cards(self) -> CardsState:
-        return self.table.cards
-
-    @property
-    def buttons(self) -> ButtonsState:
-        return self.table.buttons
-
-    @property
-    def captures(self) -> CaptureState:
-        return self.table.captures
-
-    @classmethod
-    def for_script(cls, script_name: str) -> "Game":
-        game = cls(workflow=script_name)
-        usage = SCRIPT_STATE_USAGE.get(script_name)
-        if usage and StatePortion.CAPTURES in usage.portions:
-            game.table.captures.workflow = script_name
-        return game
-
-    @classmethod
-    def from_scan(cls, scan_table: Mapping[str, Any]) -> "Game":
-        game = cls()
-        game.update_from_scan(scan_table)
-        return game
-
-    @classmethod
-    def from_capture(
-        cls,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-        card_observations: Optional[Mapping[str, Card]] = None,
-        workflow: Optional[str] = None,
-    ) -> "Game":
-        game = cls(workflow=workflow)
-        game.update_from_capture(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-            card_observations=card_observations,
-        )
-        return game
-
+   
     def scan_to_data_table(self) -> bool:
+       
         if not self.table.launch_scan():
             return False
+       
+       
         return True
+    
 
-    def update_from_scan(self, scan_table: Mapping[str, Any]) -> None:
-        self.raw_scan = dict(scan_table)
-        if hasattr(self.table, "apply_scan"):
-            self.table.apply_scan(scan_table)
-        self.metrics.update_from_scan(scan_table)
+    def update_from_scan(self) -> None:
+        pass
+   
+   
+   
 
-    def update_from_capture(
-        self,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-        card_observations: Optional[Mapping[str, Card]] = None,
-    ) -> None:
-        self.table.captures.update_from_coordinates(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-        )
-        if card_observations:
-            for base_key, observation in card_observations.items():
-                self.table.captures.record_observation(base_key, observation)
 
-    def add_card_observation(self, base_key: str, observation: Card) -> None:
-        self.table.captures.record_observation(base_key, observation)
 
-    # ---- DǸcision ----------------------------------------------------
+    # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
         if len(self.table.cards.player_cards()) != 2:
             return None
         try:
             self._calcul_chance_win()
-        except ValueError as exc:  # Ǹtat incomplet : on journalise et on abandonne
-            LOGGER.warning("Impossible de calculer la dǸcision: %s", exc)
+        except ValueError as exc:  # état incomplet : on journalise et on abandonne
+            LOGGER.warning("Impossible de calculer la décision: %s", exc)
             return None
         return self.table.suggest_action(
             chance_win_x=self.metrics.chance_win_x,
@@ -131,7 +69,7 @@ class Game:
         me_cards = self.table.cards.player_cards()
         board_cards = self.table.cards.board_cards()
         if len(me_cards) != 2:
-            raise ValueError("Les cartes du joueur ne sont pas compl��tes ou invalides.")
+            raise ValueError("Les cartes du joueur ne sont pas complètes ou invalides.")
         if len(board_cards) not in (0, 3, 4, 5):
             raise ValueError("Le nombre de cartes sur le board est incorrect.")
         self.metrics.chance_win_0 = HandEvaluator.evaluate_hand(me_cards, board_cards)
@@ -173,8 +111,16 @@ class Game:
             },
         }
 
-    # Ancien nom conservǸ pour compatibilitǸ Ǹventuelle
+    # Ancien nom conservé pour compatibilité éventuelle
     scan_to_data_table = update_from_scan
 
 
-__all__ = ["Game"]
+__all__ = [
+    "Game",
+    "CardObservation",
+    "CardsState",
+    "ButtonsState",
+    "MetricsState",
+    "CaptureState",
+    "convert_card",
+]

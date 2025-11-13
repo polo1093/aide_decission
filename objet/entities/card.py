@@ -50,8 +50,7 @@ class Card:
     ) -> None:
         """Applique une nouvelle observation et met à jour ."""
         LOGGER.debug(
-            "apply_observation(source=%s, value=%s, suit=%s, value_score=%s, suit_score=%s)",
-            source,
+            "apply_observation( value=%s, suit=%s, value_score=%s, suit_score=%s)",
             value,
             suit,
             value_score,
@@ -61,10 +60,10 @@ class Card:
         self.suit = suit
         self.value_score = value_score
         self.suit_score = suit_score
-        formatted = self.formatted()
         if self.value and self.suit: 
             suit_sym = SUIT_ALIASES.get(self.suit, self.suit)
             formatted = f"{self.value}{suit_sym}"
+            self.formatted = formatted
             self.poker_card = self._convert_string_to_pokercard(formatted) 
             
     def reset(self) -> None:

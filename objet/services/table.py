@@ -20,9 +20,9 @@ class Table:
     """Réunit Les éléments à scanner et service de scan."""
 
     cards: CardsState = field(default_factory=CardsState)
-    buttons: ButtonsState = field(default_factory=ButtonsState)
-    captures: CaptureState = field(default_factory=CaptureState)
-    scan: ScanTable = field(default_factory=ScanTable)
+    # buttons: ButtonsState = field(default_factory=ButtonsState)
+    # captures: CaptureState = field(default_factory=CaptureState)
+    scan = ScanTable()
     new_party_flag: bool = False
 
     def launch_scan(self) -> bool:
@@ -67,7 +67,7 @@ class Table:
     def New_Party(self)-> None:
         """Réinitialise l'état de la Table. et fait remonter un événement."""
         self.cards.reset()
-        self.new_party_flag = True
+        new_party_flag = True
         
 if __name__ == "__main__":
     # Petit stub de test local

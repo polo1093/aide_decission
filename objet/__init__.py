@@ -1,5 +1,3 @@
-"""Paquetage structuré en entités, états et services."""
-
-from . import entities, services, state
+"""Paquetage structurǸ en entitǸs, Ǹtats et services."""
 
 __all__ = ["entities", "services", "state"]
