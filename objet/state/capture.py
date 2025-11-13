@@ -5,7 +5,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
-from objet.entities.card import CardObservation
+from objet.entities.card import Card
 
 
 @dataclass
@@ -16,7 +16,7 @@ class CaptureState:
     regions: "OrderedDict[str, Any]" = field(default_factory=OrderedDict)
     templates: Dict[str, Any] = field(default_factory=dict)
     reference_path: Optional[str] = None
-    card_observations: Dict[str, CardObservation] = field(default_factory=dict)
+    card_observations: Dict[str, Card] = field(default_factory=dict)
     workflow: Optional[str] = None
 
     def update_from_coordinates(
@@ -36,7 +36,7 @@ class CaptureState:
         if reference_path is not None:
             self.reference_path = reference_path
 
-    def record_observation(self, base_key: str, observation: CardObservation) -> None:
+    def record_observation(self, base_key: str, observation: Card) -> None:
         self.card_observations[base_key] = observation
 
     @property

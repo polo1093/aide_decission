@@ -1,31 +1,41 @@
+# launch_controller.py à la racine du projet
+
 import cv2
 import numpy as np
 import PIL
 from PIL import ImageGrab, Image
 # from objet.services.cliqueur import Cliqueur
-# from objet.services.game import Game
-from objet.services.scan import ScanTable
+from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class Controller():
     def __init__(self):
         self.count = 0
         self.running = False
-        
+        self.cpt = 0
         self.game_stat = {}
-        # self.game = Game()
+        #
+        from objet.services.game import Game
+        self.game = Game()
         # self.click = Cliqueur()
-        self.scan = ScanTable()
+        
     def main(self):
-        if self.scan.scan():
+        
              # machine à état de la partie et save 
             # Todo
-            # self.game.scan_to_data_table(self.scan.table)
+        self.cpt += 1
+        print(f"Scan n°{self.cpt}")    
             
-            # self.game.update_from_scan(self.scan.table)
-            # button = self.game.decision()
-            # if button:
-            #     self.click.click_button(self.scan.table[button]['coord_abs'])
+        if self.game.scan_to_data_table():
+        
+            self.game.update_from_scan()
+            
+
         
         
         
@@ -65,12 +75,12 @@ class Controller():
         # chance_win_x = round_sig(chance_win_x)
 
         # Informations sur les cartes du joueur
-        # me_cards = [str(card) for card in self.game.cards.me_cards()]
-        # me_cards_str = ', '.join(me_cards)
+        me_cards = [card.formatted for card in self.game.cards.me_cards()]
+        me_cards_str = ', '.join(me_cards)
 
         # Informations sur le board
-        # board_cards = [str(card) for card in self.game.cards.board_cards()]
-        # board_cards_str = ', '.join(board_cards)
+        board_cards = [card.formatted for card in self.game.cards.board_cards()]
+        board_cards_str = ', '.join(board_cards)
 
         # Informations sur les boutons
         # buttons_info = []
@@ -99,17 +109,42 @@ class Controller():
 
         # player_money_str = '\n'.join(player_money_info)
 
-        # return (
+        return (
         #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
-        #     f"Mes cartes: {me_cards_str}\n"
-        #     f"Cartes sur le board: {board_cards_str}\n"
+             f"Mes cartes: {me_cards_str}\n"
+             f"Cartes sur le board: {board_cards_str}\n"
         #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
         #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
         #     f"Informations sur les boutons:\n{buttons_str}\n\n"
         #     f"Argent des joueurs:\n{player_money_str}"
-        # )
+         )
 
         return "Statistiques du jeu désactivées pour les tests de scan."
 
 
 
+if __name__ == "__main__":
+    controller = Controller()
+    result = controller.main()
+    print(result)
+  # Sécurisation : on vérifie que table/scan/screen_array existent
+    scan = getattr(controller.game.table, "scan", None)
+    img = getattr(scan, "screen_array", None) if scan is not None else None
+
+    if img is None:
+        print("Aucune image de screen disponible (screen_array est None).")
+    elif isinstance(img, PIL.Image.Image):
+        # Cas idéal : c’est déjà une Image PIL
+        img.show()
+    else:
+        # On suppose un array numpy en BGR ou RGB
+        arr = np.asarray(img)
+
+        if arr.ndim == 2:  # gris
+            Image.fromarray(arr).show()
+        elif arr.ndim == 3 and arr.shape[2] == 3:
+            # Si tu penses qu’il vient d’OpenCV (BGR) → convertir en RGB pour PIL
+            arr_rgb = arr[:, :, ::-1]
+            Image.fromarray(arr_rgb).show()
+        else:
+            print(f"Format d’image inattendu: shape={arr.shape}")

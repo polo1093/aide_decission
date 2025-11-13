@@ -66,6 +66,15 @@ class Card:
             suit_sym = SUIT_ALIASES.get(self.suit, self.suit)
             formatted = f"{self.value}{suit_sym}"
             self.poker_card = self._convert_string_to_pokercard(formatted) 
+            
+    def reset(self) -> None:
+        """Réinitialise l'état de la carte."""
+        self.value = None
+        self.suit = None
+        self.value_score = None
+        self.suit_score = None
+        self.poker_card = None
+        self.formatted = None
 
     @staticmethod
     def _convert_string_to_pokercard(string_carte: Optional[str]) -> Optional[PokerCard]:

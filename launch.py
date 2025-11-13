@@ -5,9 +5,12 @@ UI orchestration (Part A, non-demo, FIXED)
 =========================================
 
 - Boucle Tkinter non bloquante (`after`), Start/Stop/Snapshot, interval paramétrable.
-- Aucune donnée simulée : on n'affiche *que* ce que renvoie le scanner réel.
+- Aucune donnée simulée : on n'affiche *que* ce que renvoie le backend réel.
 - Import dynamique des classes via chemins "module:Class" passés en CLI (ou autodétection).
-- Mapping direct `scan_table` -> affichage (cartes, board, boutons, pot/fond, bankrolls).
+- 3 modes possibles :
+    * mode scanner+game : mapping direct `scan_table` -> affichage (cartes, board, boutons, pot/fond, bankrolls),
+    * mode game seul : décision/EV uniquement,
+    * mode controller : on appelle `Controller.main()` et on affiche la chaîne renvoyée.
 - Intégration `Game` optionnelle : si présente et possède `update_from_scan`,
   on calcule win_chance/EV/recommandation via `game` (sinon laissé vide).
 
@@ -19,19 +22,26 @@ avec la méthode interne `tkinter.Misc._bind()` qui provoquait :
 
 Exemples
 --------
-$ python ui_main.py \
-    --scanner objet.scan:ScanTable \
-    --game objet.game:Game
+# Mode historique (scanner + game)
+$ python launch.py \
+    --scanner objet.scanner.scan:ScanTable \
+    --game objet.services.game:Game
 
-$ python ui_main.py --scanner folder_tool.scan:ScanTable
+# Mode scanner seul
+$ python launch.py --scanner folder_tool.scan:ScanTable
+
+# Mode Controller : tout est délégué à Controller.main()
+$ python launch.py --controller objet.services.controller:Controller
 
 Notes
 -----
 - Les imports échoués n'empêchent pas le démarrage de l'UI.
-- Le scanner doit fournir un `scan_table` dict avec des clés du type :
+- Mode scanner : le scanner doit fournir un `scan_table` dict avec des clés du type :
   player_card_1_number/symbol, player_card_2_*, board_card_1..5_*,
   button_1..3, pot, fond, player_money_J1..J5.
 - `Game` est facultatif; s'il est absent, `win_chance/ev/reco` restent vides.
+- Mode controller : on ne s'occupe plus de `scan_table`, on affiche directement
+  ce que renvoie `Controller.main()`.
 """
 
 from __future__ import annotations
@@ -53,6 +63,7 @@ SUIT_SYMBOLS = {
     "pique": "♠", "coeur": "♥", "carreau": "♦", "trefle": "♣",
 }
 
+
 def fmt_card(card: Optional[Tuple[Optional[str], Optional[str]]]) -> str:
     if not card:
         return "?"
@@ -61,11 +72,14 @@ def fmt_card(card: Optional[Tuple[Optional[str], Optional[str]]]) -> str:
         return "?"
     return f"{v}{SUIT_SYMBOLS.get(str(s).lower(), '?')}"
 
+
 def safe_float_str(x: Optional[float]) -> str:
     return "—" if x is None else f"{x:.2f}"
 
+
 def pct(x: Optional[float]) -> str:
     return "—" if x is None else f"{x*100:.1f}%"
+
 
 def to_float_safe(txt: Optional[str]) -> Optional[float]:
     if not txt:
@@ -76,11 +90,13 @@ def to_float_safe(txt: Optional[str]) -> Optional[float]:
     except Exception:
         return None
 
+
 def getv(d: Dict[str, Any], key: str) -> Optional[str]:
     try:
         return d[key]["value"]
     except Exception:
         return None
+
 
 def load_class(dotted: str):
     """
@@ -96,6 +112,7 @@ def load_class(dotted: str):
     except Exception:
         return None
 
+
 # ----------------------------------------------------------------------------
 # UI State
 # ----------------------------------------------------------------------------
@@ -105,31 +122,52 @@ class ButtonInfo:
     name: Optional[str] = None
     value: Optional[float] = None
 
+
 @dataclass
 class PlayerInfo:
     seat: int
     bankroll: Optional[float] = None
 
+
 @dataclass
 class UIState:
-    player_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(default_factory=lambda: [None, None])
-    board_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(default_factory=lambda: [None]*5)
+    # Mode scanner
+    player_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(
+        default_factory=lambda: [None, None]
+    )
+    board_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(
+        default_factory=lambda: [None] * 5
+    )
     pot: Optional[float] = None
     fond: Optional[float] = None
     players: List[PlayerInfo] = field(default_factory=list)
-    buttons: List[ButtonInfo] = field(default_factory=lambda: [ButtonInfo(), ButtonInfo(), ButtonInfo()])
+    buttons: List[ButtonInfo] = field(
+        default_factory=lambda: [ButtonInfo(), ButtonInfo(), ButtonInfo()]
+    )
     win_chance: Optional[float] = None
     ev: Optional[float] = None
     recommended: Optional[ButtonInfo] = None
+
+    # Perf
     last_scan_ms: Optional[float] = None
     fps: Optional[float] = None
+
+    # Mode controller : texte brut renvoyé par Controller.main()
+    controller_text: Optional[str] = None
+
 
 # ----------------------------------------------------------------------------
 # App
 # ----------------------------------------------------------------------------
 
 class App(tk.Tk):
-    def __init__(self, scanner_cls, game_cls=None, scan_interval_ms: int = 250):
+    def __init__(
+        self,
+        scanner_cls=None,
+        game_cls=None,
+        controller_cls=None,
+        scan_interval_ms: int = 250,
+    ):
         super().__init__()
         self.title("Live Table – UI Orchestrator")
         self.geometry("880x640")
@@ -138,6 +176,7 @@ class App(tk.Tk):
         # Instances backend (facultatives/optionnelles)
         self.scanner = scanner_cls() if scanner_cls else None
         self.game = game_cls() if game_cls else None
+        self.controller = controller_cls() if controller_cls else None
 
         # Orchestration
         self.scanning = False
@@ -159,15 +198,25 @@ class App(tk.Tk):
         self.frm_top = ttk.Frame(self)
         self.btn_start = ttk.Button(self.frm_top, text="▶ Start", command=self.start_scan)
         self.btn_stop = ttk.Button(self.frm_top, text="⏸ Stop", command=self.stop_scan)
-        self.btn_snap = ttk.Button(self.frm_top, text="📸 Snapshot", command=self.snapshot_once)
+        self.btn_snap = ttk.Button(
+            self.frm_top, text="📸 Snapshot", command=self.snapshot_once
+        )
         self.lbl_interval = ttk.Label(self.frm_top, text="Interval (ms):")
         self.var_interval = tk.StringVar(value=str(self.scan_interval_ms))
         self.ent_interval = ttk.Entry(self.frm_top, width=6, textvariable=self.var_interval)
         self.lbl_status = ttk.Label(self.frm_top, text="Ready.", width=30, anchor="w")
 
         self.frm_center = ttk.Frame(self)
-        self.txt = tk.Text(self.frm_center, height=26, wrap="none", font=("Consolas", 12), state="disabled")
-        self.scroll = ttk.Scrollbar(self.frm_center, orient="vertical", command=self.txt.yview)
+        self.txt = tk.Text(
+            self.frm_center,
+            height=26,
+            wrap="none",
+            font=("Consolas", 12),
+            state="disabled",
+        )
+        self.scroll = ttk.Scrollbar(
+            self.frm_center, orient="vertical", command=self.txt.yview
+        )
         self.txt.configure(yscrollcommand=self.scroll.set)
 
         self.frm_bottom = ttk.Frame(self)
@@ -201,8 +250,9 @@ class App(tk.Tk):
 
     def start_scan(self):
         self._update_interval()
-        if not self.scanner:
-            self.lbl_status.configure(text="Scanner non importé (voir --scanner).")
+        # Mode controller prioritaire : pas besoin de scanner dédié
+        if not self.controller and not self.scanner:
+            self.lbl_status.configure(text="Aucun backend (scanner/controller) configuré.")
             return
         if not self.scanning:
             self.scanning = True
@@ -255,9 +305,31 @@ class App(tk.Tk):
 
     def _poll_once(self):
         """
-        Récupère un scan_table réel depuis le scanner,
-        met à jour l'UIState, et (si dispo) alimente Game pour win/EV/reco.
+        - Mode controller : appelle `Controller.main()` et stocke le texte brut.
+        - Mode scanner : récupère un scan_table réel depuis le scanner,
+          met à jour l'UIState, et (si dispo) alimente Game pour win/EV/reco.
         """
+        # ----- Mode controller : prioritaire si présent -----
+        if self.controller is not None:
+            try:
+                text = self.controller.main()
+            except Exception as e:
+                self.state.controller_text = f"Controller error: {e}"
+                self.lbl_status.configure(text=f"Controller error: {e}")
+            else:
+                self.state.controller_text = text
+                if isinstance(text, str) and "don t find" in text.lower():
+                    self.lbl_status.configure(text="Controller : rien détecté.")
+                else:
+                    self.lbl_status.configure(text="Controller OK.")
+            # On ne touche pas au mapping détaillé dans ce mode
+            return
+
+        # ----- Mode scanner historique -----
+        if not self.scanner:
+            self.lbl_status.configure(text="Scanner non importé (voir --scanner).")
+            return
+
         try:
             out = self.scanner.scan()  # scanner réel attendu
             scan_table = None
@@ -265,8 +337,8 @@ class App(tk.Tk):
                 scan_table = out[1]
             elif isinstance(out, dict):
                 scan_table = out
-            elif hasattr(self.scanner, 'table'):
-                scan_table = getattr(self.scanner, 'table', None)
+            elif hasattr(self.scanner, "table"):
+                scan_table = getattr(self.scanner, "table", None)
             if not isinstance(scan_table, dict):
                 self.lbl_status.configure(text="Scan invalide (pas de dict).")
                 return
@@ -275,9 +347,21 @@ class App(tk.Tk):
             return
 
         # ------ Mapping direct scan_table -> UIState (cartes/board/boutons/montants) ------
-        pc1 = (getv(scan_table, "player_card_1_number"), getv(scan_table, "player_card_1_symbol"))
-        pc2 = (getv(scan_table, "player_card_2_number"), getv(scan_table, "player_card_2_symbol"))
-        board = [(getv(scan_table, f"board_card_{i}_number"), getv(scan_table, f"board_card_{i}_symbol")) for i in range(1, 6)]
+        pc1 = (
+            getv(scan_table, "player_card_1_number"),
+            getv(scan_table, "player_card_1_symbol"),
+        )
+        pc2 = (
+            getv(scan_table, "player_card_2_number"),
+            getv(scan_table, "player_card_2_symbol"),
+        )
+        board = [
+            (
+                getv(scan_table, f"board_card_{i}_number"),
+                getv(scan_table, f"board_card_{i}_symbol"),
+            )
+            for i in range(1, 6)
+        ]
         buttons = []
         for i in range(1, 4):
             raw = getv(scan_table, f"button_{i}")
@@ -304,7 +388,11 @@ class App(tk.Tk):
                     if isinstance(reco, str):
                         recommended = ButtonInfo(name=reco, value=None)
                     elif isinstance(reco, dict):
-                        recommended = ButtonInfo(name=str(reco.get("name") or reco.get("button")), value=reco.get("value"))
+                        recommended = ButtonInfo(
+                            name=str(reco.get("name") or reco.get("button")),
+                            value=reco.get("value"),
+                        )
+                # Compat : certains Game peuvent exposer win_chance/ev en attributs
                 win_chance = getattr(self.game, "win_chance", None)
                 ev = getattr(self.game, "ev", None)
             except Exception as e:
@@ -320,11 +408,17 @@ class App(tk.Tk):
         self.state.win_chance = win_chance
         self.state.ev = ev
         self.state.recommended = recommended
+        # On laisse controller_text tel quel (peut rester None en mode scanner)
 
     # ---------- Rendering ----------
 
     def _render(self):
-        s = self._format_text(self.state)
+        # Si on est en mode controller, on affiche directement le texte du contrôleur
+        if self.controller is not None:
+            s = self.state.controller_text or ""
+        else:
+            s = self._format_text(self.state)
+
         self.txt.configure(state="normal")
         self.txt.delete("1.0", "end")
         self.txt.insert("1.0", s)
@@ -334,11 +428,19 @@ class App(tk.Tk):
     def _format_text(st: UIState) -> str:
         pc_line = " ".join(fmt_card(c) for c in st.player_cards)
         board_line = " ".join(fmt_card(c) for c in st.board_cards)
-        buttons_line = "  |  ".join([
-            f"B{i}:{(b.name if b.name else '—')}{(' '+safe_float_str(b.value)) if b.value is not None else ''}"
-            for i, b in enumerate(st.buttons, start=1)
-        ])
-        players_line = "  |  ".join([f"J{p.seat}:{'Absent' if p.bankroll is None else safe_float_str(p.bankroll)}" for p in st.players])
+        buttons_line = "  |  ".join(
+            [
+                f"B{i}:{(b.name if b.name else '—')}"
+                f"{(' ' + safe_float_str(b.value)) if b.value is not None else ''}"
+                for i, b in enumerate(st.buttons, start=1)
+            ]
+        )
+        players_line = "  |  ".join(
+            [
+                f"J{p.seat}:{'Absent' if p.bankroll is None else safe_float_str(p.bankroll)}"
+                for p in st.players
+            ]
+        )
         win_txt = pct(st.win_chance)
         ev_txt = safe_float_str(st.ev)
         reco_txt = "—"
@@ -348,7 +450,11 @@ class App(tk.Tk):
                 reco_txt += f" {safe_float_str(st.recommended.value)}"
 
         perf = []
-        perf.append(f"scan: {safe_float_str(st.last_scan_ms)} ms" if st.last_scan_ms is not None else "scan: — ms")
+        perf.append(
+            f"scan: {safe_float_str(st.last_scan_ms)} ms"
+            if st.last_scan_ms is not None
+            else "scan: — ms"
+        )
         perf.append(f"fps: {st.fps:.1f}" if st.fps is not None else "fps: —")
 
         lines = [
@@ -358,7 +464,7 @@ class App(tk.Tk):
             f"Board        : {board_line}",
             "",
             f"Pot : {safe_float_str(st.pot)}    |  Fond (tapis) : {safe_float_str(st.fond)}",
-            f"Joueurs      : {players_line if players_line else '—'}",
+            f"Nbr_Joueurs      : {players_line if players_line else '—'}",
             "",
             f"Chances de gain : {win_txt}",
             f"EV (attendue)   : {ev_txt}",
@@ -372,14 +478,15 @@ class App(tk.Tk):
         ]
         return "\n".join(lines)
 
+
 # ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 
-def autodetect_classes() -> Tuple[Optional[type], Optional[type]]:
+def autodetect_classes() -> Tuple[Optional[type], Optional[type], Optional[type]]:
     """
-    Tente quelques chemins courants pour trouver ScanTable et Game.
-    Retourne (scanner_cls, game_cls), chacun pouvant être None.
+    Tente quelques chemins courants pour trouver ScanTable, Game et Controller.
+    Retourne (scanner_cls, game_cls, controller_cls), chacun pouvant être None.
     """
     candidates_scanner = [
         "objet.scanner.scan:ScanTable",
@@ -394,34 +501,76 @@ def autodetect_classes() -> Tuple[Optional[type], Optional[type]]:
         "game:Game",
         "objet.Game:Game",
     ]
+    candidates_controller = [
+        "objet.services.controller:Controller",
+        "objet.controller:Controller",
+        "controller:Controller",
+    ]
+
     scanner_cls = None
     game_cls = None
+    controller_cls = None
+
     for dotted in candidates_scanner:
         scanner_cls = load_class(dotted)
         if scanner_cls:
             break
+
     for dotted in candidates_game:
         game_cls = load_class(dotted)
         if game_cls:
             break
-    return scanner_cls, game_cls
+
+    for dotted in candidates_controller:
+        controller_cls = load_class(dotted)
+        if controller_cls:
+            break
+
+    return scanner_cls, game_cls, controller_cls
 
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="UI orchestrator (non-demo)")
-    ap.add_argument("--scanner", help="Chemin 'module:Class' du scanner (ex: objet.scan:ScanTable)", default=None)
-    ap.add_argument("--game", help="Chemin 'module:Class' du Game (ex: objet.game:Game)", default=None)
-    ap.add_argument("--interval", type=int, default=250, help="Intervalle de scan en ms (25..2000)")
+    ap.add_argument(
+        "--scanner",
+        help="Chemin 'module:Class' du scanner (ex: objet.scanner.scan:ScanTable)",
+        default=None,
+    )
+    ap.add_argument(
+        "--game",
+        help="Chemin 'module:Class' du Game (ex: objet.services.game:Game)",
+        default=None,
+    )
+    ap.add_argument(
+        "--controller",
+        help="Chemin 'module:Class' du Controller (ex: objet.services.controller:Controller)",
+        default=None,
+    )
+    ap.add_argument(
+        "--interval",
+        type=int,
+        default=250,
+        help="Intervalle de scan en ms (25..2000)",
+    )
     return ap.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
+
     scanner_cls = load_class(args.scanner) if args.scanner else None
     game_cls = load_class(args.game) if args.game else None
-    if not scanner_cls and not game_cls:
-        scanner_cls, game_cls = autodetect_classes()
-    app = App(scanner_cls=scanner_cls, game_cls=game_cls, scan_interval_ms=args.interval)
+    controller_cls = load_class(args.controller) if args.controller else None
+
+    if not scanner_cls and not game_cls and not controller_cls:
+        scanner_cls, game_cls, controller_cls = autodetect_classes()
+
+    app = App(
+        scanner_cls=scanner_cls,
+        game_cls=game_cls,
+        controller_cls=controller_cls,
+        scan_interval_ms=args.interval,
+    )
     app.mainloop()
 
 

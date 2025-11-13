@@ -13,13 +13,18 @@ from PIL import Image
 # Accès modules du dépôt
 import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+SCRIPTS_ROOT = Path(__file__).resolve().parent
+for root in (PROJECT_ROOT, SCRIPTS_ROOT):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
-from objet.entities.card import CardObservation
-from objet.services.game import Game
+from objet.entities.card import Card
+
 from _utils import extract_region_images, load_coordinates
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    # Pour les hints éventuels, sans import runtime
+    from objet.services.game import Game
 # --- Modèle ---
 
 def is_card_present(patch: Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
@@ -201,6 +206,7 @@ def main(argv: Optional[list] = None) -> int:
 
     # 2) Charger table et coordonnées
     table_img = Image.open(table_path).convert("RGBA")
+    from objet.services.game import Game
     game = Game.for_script(Path(__file__).name)
     regions, resolved, table_capture = load_coordinates(coords_path)
     game.update_from_capture(
@@ -310,6 +316,7 @@ class TableState:
 
 class TableController:
     def __init__(self, game_dir: Path, game_state: Optional[Game] = None) -> None:
+        from objet.services.game import Game  # import local pour éviter les cycles
         self.game_dir = Path(game_dir)
         self.coords_path = self.game_dir / "coordinates.json"
         self.ref_path = self._first_of("me", (".png", ".jpg", ".jpeg"))

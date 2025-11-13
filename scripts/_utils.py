@@ -151,8 +151,8 @@ def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping
     )
 
 
- scripts/_utils.py
-from __future__ import annotations
+
+
 
 from dataclasses import dataclass, field
 import json

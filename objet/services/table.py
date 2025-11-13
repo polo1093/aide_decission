@@ -2,48 +2,77 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional
+from pathlib import Path
+from typing import Optional
+import sys
 
 
-from objet.state import ButtonsState, CardsState, CaptureState, extract_scan_value
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from objet.state import CardsState   # ButtonsState, CaptureState, extract_scan_value
 from objet.scanner.scan import ScanTable
 
 
 @dataclass
 class Table:
-    """Réunit cartes, boutons et informations de capture."""
+    """Réunit Les éléments à scanner et service de scan."""
 
     cards: CardsState = field(default_factory=CardsState)
     # buttons: ButtonsState = field(default_factory=ButtonsState)
-    # players: list[Any] = field(default_factory=list)
-    scan : ScanTable    = field(default_factory=ScanTable)
+    # captures: CaptureState = field(default_factory=CaptureState)
+    scan: ScanTable = field(default_factory=ScanTable)
+    new_party_flag: bool = False
 
-
-    def launch_scan(self):
-        if self.scan.test_scan():
-
+    def launch_scan(self) -> bool:
+       
+        if not self.scan.test_scan():
+            return False
         
+        # --- Main héros (2 cartes) ---
+        for idx, card in enumerate(self.cards.me, start=1):
+            value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
+                position=card.card_coordinates
+            )
+            if value is not None or suit is not None:
+                if value != card.value and suit != card.suit:
+                    self.New_Party()
+            card.apply_observation(
+                value=value,
+                suit=suit,
+                value_score=confidence_value,
+                suit_score=confidence_suit,
+            )
         
-            for i in range(1, 6):
-                value, suit, confidence_value, confidence_suit = self.scan.scan_carte(position=self.cards.card.board[i].card_coordinates)
-                self.cards.card.board[i].apply_observation(
+        # --- Board (5 cartes) ---
+        # On suppose que `cards.board` est indexable 0..4
+        for idx, card in enumerate(self.cards.board, start=1):
+            if card.formatted is None:
+                value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
+                    position=card.card_coordinates
+                )
+                if value is None and suit is None:
+                    continue
+                card.apply_observation(
                     value=value,
                     suit=suit,
                     value_score=confidence_value,
                     suit_score=confidence_suit,
                 )
-              
-            for i in range(1, 3):
-                value, suit, confidence_value, confidence_suit = self.scan.scan_carte(position=self.cards.card.me[i].card_coordinates)
-                self.cards.card.me[i].apply_observation(
-                    value=value,
-                    suit=suit,
-                    value_score=confidence_value,
-                    suit_score=confidence_suit,
-                )
-        # self.buttons.update_from_scan(scan_table)
 
-   
 
+        return True
+
+    def New_Party(self)-> None:
+        """Réinitialise l'état de la Table. et fait remonter un événement."""
+        self.cards.reset()
+        new_party_flag = True
+        
+if __name__ == "__main__":
+    # Petit stub de test local
+    table = Table()
+    table.launch_scan()
+    print("Cartes joueur:", table.cards.me_cards())
 
 __all__ = ["Table"]

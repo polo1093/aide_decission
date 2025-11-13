@@ -10,7 +10,7 @@ from PIL import Image
 import cv2
 import json
 
-from objet.services.game import Game
+
 
 # ---------- Matching ----------
 
@@ -327,7 +327,8 @@ def main(argv: Optional[list] = None) -> int:
     scr = _load_image(screenshot_path).convert("RGBA")
     exp = _load_image(expected_path).convert("RGBA")
     ref = _load_image(reference_path).convert("RGBA")
-
+    
+    from objet.services.game import Game
     game = Game.for_script(Path(__file__).name)
 
     # 1) Taille + offset (inférence par défaut)

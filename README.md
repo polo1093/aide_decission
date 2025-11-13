@@ -25,12 +25,9 @@ L’application est structurée autour d’un noyau `Game` qui orchestre l’ét
 &nbsp;&nbsp;&nbsp;&nbsp;Moteur de décision basé sur l’état courant du `Game` / `Table` / `Player_state` (rules, heuristiques, modèle ML, etc.)
 
 ### 2. Contrôleur
-
-Bloc à challenger :  
-- Question ouverte : **le contrôleur est-il toujours utile ?**  
-- Si conservé, il joue le rôle d’orchestrateur haut niveau :  
+- joue le rôle d’orchestrateur haut niveau :  
   - création et cycle de vie de `Game`,  
-  - coordination entre `scan_table`, `Party` et `Décission`,  
+  - coordination entre  `Game` et `Décission`,  
   - gestion des événements externes (UI, hotkeys, logs, etc.).
 
 ### 3. Afficheur / `launch.py` + Thinker

@@ -95,20 +95,13 @@ class CardsState:
         """Retourne les entités Card du board."""
         return self.board
 
-    def as_strings(self) -> Dict[str, List[str]]:
-        """
-        Fonction utilitaire de debug : renvoie les cartes sous forme '10♥', 'A♠', etc.
-        """
-        def _format(cards: List[Card]) -> List[str]:
-            out: List[str] = []
-            for c in cards:
-                out.append(c.formatted() or "?")
-            return out
 
-        return {
-            "me": _format(self.me),
-            "board": _format(self.board),
-        }
+        
+    def reset(self) -> None:
+        """Réinitialise l'état de toutes les cartes."""
+        for card in self.me + self.board:
+            card.reset()
+            
 
 
 __all__ = ["CardsState"]

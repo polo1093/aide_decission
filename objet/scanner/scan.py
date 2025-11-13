@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Tuple
 
 from folder_tool import timer
+from PIL import ImageGrab
 
 
 
@@ -194,17 +195,21 @@ class ScanTable():
         return None, None
 
 
-    def scan_pot(self, image crop globale, position du pot):
+    def scan_pot(self, position):
+        self.screen_crop
         return pot_value
     
     
-    def scan_player(self, image crop globale, position du joueur):  
+    def scan_player(self, position):  
+        self.screen_crop
         scan_money_player
         return player_state,player_active
     
-    def scan_money_player(self, image crop globale, position de la money):
+    def scan_money_player(self,position):
+        self.screen_crop
         return money_value
         
-    def scan_bouton(self, image crop globale, position du bouton):
+    def scan_bouton(self, position):
         # need ocr and traitement de texte
+        self.screen_crop
         return money_value, texte
