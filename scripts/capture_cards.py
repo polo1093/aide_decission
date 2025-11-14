@@ -18,7 +18,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -483,11 +483,16 @@ def _ahash(img: Image.Image, hash_size: int = 8) -> str:
 # Point d'entrée unifié
 # ==============================
 
-if __name__ == "__main__":
-    argv = sys.argv[1:]
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """Point d'entrée commun pour les CLIs de capture."""
+
+    parsed = list(argv) if argv is not None else sys.argv[1:]
     # Heuristique simple : si --video est présent, on lance le mode vidéo,
     # sinon la validation sur image fixe.
-    if "--video" in argv:
-        raise SystemExit(main_video_validate(argv))
-    else:
-        raise SystemExit(main_cards_validate(argv))
+    if "--video" in parsed:
+        return int(main_video_validate(parsed))
+    return int(main_cards_validate(parsed))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
