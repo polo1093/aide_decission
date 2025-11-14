@@ -42,8 +42,8 @@ class Table:
     
     coord_path: Path | str = DEFAULT_COORD_PATH
     cards: CardsState = field(default_factory=CardsState)
-    # buttons: ButtonsState = field(default_factory=ButtonsState)
-    # captures: CaptureState = field(default_factory=CaptureState)
+    buttons: ButtonsState = field(default_factory=ButtonsState)
+    captures: CaptureState = field(default_factory=CaptureState)
     scan = ScanTable()
     pot = Fond()
     new_party_flag: bool = False
