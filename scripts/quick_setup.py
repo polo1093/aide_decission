@@ -164,18 +164,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
         ))
     if not args.skip_capture:
-        steps.append((
-            "Validation capture vidéo",
-            lambda: _run_capture_video(
-                args.game,
-                game_dir,
-                args.video,
-                int(args.capture_stride),
-                float(args.capture_num_th),
-                float(args.capture_suit_th),
-                int(args.capture_require_k),
-            ),
-        ))
+        if args.video:
+            steps.append((
+                "Validation capture vidéo",
+                lambda: _run_capture_video(
+                    args.game,
+                    game_dir,
+                    args.video,
+                    int(args.capture_stride),
+                    float(args.capture_num_th),
+                    float(args.capture_suit_th),
+                    int(args.capture_require_k),
+                ),
+            ))
+        else:
+            # Mode "je clique sur Exécuter" sans arguments :
+            # on ignore simplement la validation vidéo.
+            print("[INFO] Aucune vidéo (--video) fournie : étape 'Validation capture vidéo' sautée.")
+
 
     status = 0
     for title, func in steps:
@@ -183,6 +189,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             status = func()
         except SystemExit as exc:
+            # Afficher le message associé au SystemExit s'il existe
+            msg = str(exc)
+            if msg:
+                print(f"[ERREUR] {title}: {msg}")
             status = int(exc.code) if isinstance(exc.code, int) else 1
         except Exception as exc:  # pragma: no cover - dépend de l'exécution temps réel
             print(f"[ERREUR] {title}: {exc}")
@@ -191,9 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[ECHEC] {title} (code {status})")
             if not args.continue_on_error:
                 break
-    else:
-        print("\nConfiguration rapide terminée ✅")
-        return 0 if status == 0 else status
+
 
     return status
 
