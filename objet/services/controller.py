@@ -75,12 +75,12 @@ class Controller():
         # chance_win_x = round_sig(chance_win_x)
 
         # Informations sur les cartes du joueur
-        me_cards = [card.formatted for card in self.game.cards.me_cards()]
-        me_cards_str = ', '.join(me_cards)
+        me_cards_str = [card.formatted for card in self.game.table.cards.me_cards()]
+        
 
         # Informations sur le board
-        board_cards = [card.formatted for card in self.game.cards.board_cards()]
-        board_cards_str = ', '.join(board_cards)
+        board_cards_str = [card.formatted for card in self.game.table.cards.board_cards()]
+        
 
         # Informations sur les boutons
         # buttons_info = []
