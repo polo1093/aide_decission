@@ -1,4 +1,4 @@
-from pathlib import Path
+
 from typing import Optional, Tuple
 
 import cv2
@@ -6,6 +6,7 @@ import numpy as np
 from PIL import ImageGrab, Image
 import logging
 
+from pathlib import Path
 import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -16,6 +17,7 @@ from objet.utils.pyauto import locate_in_image
 from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
 
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
+DEFAULT_CARDS_ROOT = Path("config/PMU/Cards")
 
 
 class ScanTable:
@@ -48,7 +50,8 @@ class ScanTable:
         self.screen_crop: Optional[np.ndarray] = None      # crop table, BGR
         self.table_origin: Optional[Tuple[int, int]] = None
         self.scan_string: str = "init"
-
+        self.cards_root = DEFAULT_CARDS_ROOT
+        self.template_index = TemplateIndex(self.cards_root)
         # Première capture
         self.screen_refresh()
 
@@ -139,12 +142,15 @@ class ScanTable:
             
 
         # crops séparés pour la valeur et le symbole
-        image_card_value = _crop_box_gray(position_value)
-        image_card_suit = _crop_box_gray(position_suit)
+        image_card_value = self._crop_box_gray(position_value)
+        image_card_suit = self._crop_box_gray(position_suit)
 
-
-        if is_card_present(image_card_gray):
-            value, suit, score_value, score_suit = recognize_number_and_suit(image_card_value,image_card_suit) # manque un argument  sans dout pour la suit
+        
+        # rgb = cv2.cvtColor(image_card_value, cv2.COLOR_BGR2RGB)
+        # Image.fromarray(rgb).show()
+        
+        if is_card_present(image_card_value):
+            carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(image_card_value,image_card_suit,self.template_index) # manque un argument  sans dout pour la suit
 
             # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
             conf_val = 1.0 if carte_value is not None else 0.0
@@ -153,17 +159,7 @@ class ScanTable:
         return None, None, 0.0, 0.0
 
 
-    def _crop_box_gray(box, pad=3):
-        """Retourne un crop (numpy BGR) pour box=(x,y,w,h) avec padding et clamp."""
-        x, y, w, h = box
-        x0 = max(0, int(x - pad))
-        y0 = max(0, int(y - pad))
-        x1 = min(w_img, int(x + w + pad))
-        y1 = min(h_img, int(y + h + pad))
-        img = self.screen_crop[y0:y1, x0:x1].copy()
-        if image_card.ndim == 3:
-            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        return img
+ 
     
     # Stubs à compléter plus tard
     def scan_pot(self, position):
@@ -183,6 +179,15 @@ class ScanTable:
         return None, None
 
 
+    def _crop_box_gray(self,box, pad=3):
+        """Retourne un crop (numpy BGR) pour box=(x,y,w,h) avec padding et clamp."""
+        x, y, w, h = box
+        x0 = max(0, int(x - pad))
+        y0 = max(0, int(y - pad))
+        x1 = min(self.screen_crop.shape[1], int(x + w + pad))
+        y1 = min(self.screen_crop.shape[0], int(y + h + pad))
+        img = self.screen_crop[y0:y1, x0:x1].copy()
+        return img
 
 if __name__ == "__main__":
     scan = ScanTable()
@@ -193,16 +198,6 @@ if __name__ == "__main__":
     import numpy as np
     from PIL import Image
 
-    img = scan.screen_array  # BGR
-
-    if isinstance(img, np.ndarray):
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        Image.fromarray(rgb).show()
-    elif isinstance(img, Image.Image):
-        img.show()
-    else:
-        print("Type d'image inattendu:", type(img))
-        
     img = scan.screen_crop  # BGR
 
     if isinstance(img, np.ndarray):

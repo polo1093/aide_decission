@@ -1,4 +1,4 @@
-# objet/state/cards_state.py
+# objet/state/cards.py
 """Gestion de l'état des cartes de la table.
 
 - 5 cartes de board
@@ -6,14 +6,17 @@
 - Coordonnées injectées à la déclaration à partir de coordinates.json.
 """
 
-from __future__ import annotations
+from pathlib import Path
+import sys
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from objet.entities.card import Card
-from objet.utils.calibration import Region, load_coordinates
+from objet.utils.calibration import Region, load_coordinates , bbox_from_region
 
 CardBox = Tuple[int, int, int, int]
 
@@ -21,34 +24,6 @@ CardBox = Tuple[int, int, int, int]
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 
-def _card_box_from_regions(regions: Dict[str, Region], base_key: str) -> Optional[CardBox]:
-    """
-    Calcule le bounding box global pour une carte à partir de :
-
-      - <base_key>_number
-      - <base_key>_symbol
-
-    en fusionnant les 2 rectangles (valeur + symbole).
-    """
-    keys = [f"{base_key}_number", f"{base_key}_symbol"]
-    boxes: List[CardBox] = []
-
-    for key in keys:
-        region = regions.get(key)
-        if region is None:
-            continue
-        x, y = region.top_left
-        w, h = region.size
-        boxes.append((x, y, x + w, y + h))
-
-    if not boxes:
-        return None
-
-    x1 = min(b[0] for b in boxes)
-    y1 = min(b[1] for b in boxes)
-    x2 = max(b[2] for b in boxes)
-    y2 = max(b[3] for b in boxes)
-    return x1, y1, x2, y2
 
 
 @dataclass
@@ -71,18 +46,20 @@ class CardsState:
         if self.board and self.me:
             return
 
-        regions, _, _ = load_coordinates(self.coord_path)
+        regions, templates_resolved, _ = load_coordinates(self.coord_path)
+
 
         if not self.board:
             self.board = [
-                Card(card_coordinates_value=_card_box_from_regions(regions, f"board_card_{i}_number"),
-                     card_coordinates_suit=_card_box_from_regions(regions, f"board_card_{i}_symbol"))
+                Card(card_coordinates_value=bbox_from_region(regions.get(f"board_card_{i}_number")),
+                      card_coordinates_suit=bbox_from_region(regions.get(f"board_card_{i}_symbol")),)
                 for i in range(1, 6)
             ]
 
         if not self.me:
             self.me = [
-                Card(card_coordinates=_card_box_from_regions(regions, f"player_card_{i}"))
+                Card(card_coordinates_value=bbox_from_region(regions.get(f"player_card_{i}_number")),
+                      card_coordinates_suit=bbox_from_region(regions.get(f"player_card_{i}_symbol")),)
                 for i in range(1, 3)
             ]
 
@@ -103,6 +80,9 @@ class CardsState:
         for card in self.me + self.board:
             card.reset()
             
-
+if __name__ == "__main__":
+    # Petit stub de test local
+    cards_state = CardsState()
+    print(cards_state.me[0])
 
 __all__ = ["CardsState"]

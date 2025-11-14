@@ -88,8 +88,38 @@ class TemplateIndex:
         return miss
 
 
-def _to_gray(img: Image.Image) -> np.ndarray:
-    return cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+def _to_gray(img):
+    """Normalise un patch en niveau de gris (ndarray 2D).
+
+    Accepte :
+    - un numpy.ndarray (BGR ou déjà en gris),
+    - une image PIL,
+    - au pire, tout objet convertible en ndarray.
+    """
+    # 1) Cas OpenCV / numpy
+    if isinstance(img, np.ndarray):
+        # Déjà en niveaux de gris
+        if img.ndim == 2:
+            return img
+        # Image couleur (en pratique BGR si ça vient de cv2 / screen_crop)
+        if img.ndim == 3:
+            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        raise ValueError(f"Format ndarray inattendu pour _to_gray: shape={img.shape}")
+
+    # 2) Cas PIL.Image
+    if isinstance(img, Image.Image):
+        arr = np.array(img.convert("RGB"))
+        return cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+
+    # 3) Fallback : on tente de convertir en ndarray
+    arr = np.array(img)
+    if arr.ndim == 2:
+        return arr
+    if arr.ndim == 3:
+        # On part du principe que c’est du BGR (cas le plus probable avec OpenCV)
+        return cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+
+    raise ValueError(f"Type d'image non supporté pour _to_gray: {type(img)}")
 
 
 def is_card_present(patch: np.ndarray | Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:

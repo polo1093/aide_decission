@@ -275,3 +275,13 @@ def collect_card_patches(
 
 
 
+
+BBox = Tuple[int, int, int, int]  # (x, y, w, h)
+
+def bbox_from_region(region: Optional["Region"]) -> Optional[BBox]:
+ 
+    x, y = region.top_left  
+    size = region.size
+
+    w, h = size
+    return x, y, w, h
