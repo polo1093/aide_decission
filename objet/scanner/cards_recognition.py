@@ -87,6 +87,35 @@ class TemplateIndex:
                     miss["suits"].append(s)
         return miss
 
+    def missing_cards(
+        self,
+        expect_numbers: Iterable[str],
+        expect_suits: Iterable[str],
+    ) -> List[str]:
+        """Liste les combinaisons valeur/couleur impossibles faute de gabarits.
+
+        Chaque carte attendue est décrite sous la forme ``<value>_of_<suit>`` et
+        annotée avec la ou les références manquantes (valeur ou couleur).
+        """
+
+        numbers_available = set(self.numbers)
+        suits_available = set(self.suits)
+        missing: List[str] = []
+        for value in expect_numbers:
+            value_ok = value in numbers_available
+            for suit in expect_suits:
+                suit_ok = suit in suits_available
+                if value_ok and suit_ok:
+                    continue
+                reasons: List[str] = []
+                if not value_ok:
+                    reasons.append(f"number '{value}'")
+                if not suit_ok:
+                    reasons.append(f"suit '{suit}'")
+                reason_str = " and ".join(reasons)
+                missing.append(f"{value}_of_{suit} (missing {reason_str})")
+        return missing
+
 
 def _to_gray(img):
     """Normalise un patch en niveau de gris (ndarray 2D).
