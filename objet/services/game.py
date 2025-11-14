@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 from pokereval.hand_evaluator import HandEvaluator
 
 import sys
-from pathlib import Path
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -32,6 +33,45 @@ class Game:
     table: Table = field(default_factory=Table)
     metrics: MetricsState = field(default_factory=MetricsState)
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
+    workflow: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Garantit que les états dépendants existent."""
+        if not isinstance(self.table.cards, CardsState):
+            self.table.cards = CardsState()
+        if not hasattr(self.table, "buttons") or not isinstance(self.table.buttons, ButtonsState):
+            self.table.buttons = ButtonsState()
+        if not hasattr(self.table, "captures") or not isinstance(self.table.captures, CaptureState):
+            self.table.captures = CaptureState()
+
+    # ---- Fabriques ---------------------------------------------------
+    @classmethod
+    def for_script(cls, script_name: str) -> "Game":
+        """Construit un état de jeu léger pour un script donné."""
+
+        game = cls()
+        name = Path(script_name).name
+        usage = SCRIPT_STATE_USAGE.get(name)
+        if not usage:
+            return game
+
+        portions = usage.portions
+        if StatePortion.CARDS not in portions:
+            game.table.cards = CardsState()
+        if StatePortion.BUTTONS not in portions:
+            game.table.buttons = ButtonsState()
+        if StatePortion.CAPTURES not in portions:
+            game.table.captures = CaptureState()
+        return game
+
+    # ---- Accès pratiques --------------------------------------------
+    @property
+    def cards(self) -> CardsState:
+        return self.table.cards
+
+    @cards.setter
+    def cards(self, state: CardsState) -> None:
+        self.table.cards = state
 
    
     def scan_to_data_table(self) -> bool:
@@ -47,6 +87,35 @@ class Game:
         """Met à jour l'état du jeu à partir du dernier scan."""
         # TODO: compléter lorsque les métriques / boutons seront branchés
         return None
+
+    def update_from_capture(
+        self,
+        *,
+        table_capture: Optional[Mapping[str, Any]] = None,
+        regions: Optional[Mapping[str, Any]] = None,
+        templates: Optional[Mapping[str, Any]] = None,
+        reference_path: Optional[str] = None,
+    ) -> None:
+        """Injecte des paramètres de capture dans l'état courant."""
+
+        self.table.captures.update_from_coordinates(
+            table_capture=table_capture,
+            regions=regions,
+            templates=templates,
+            reference_path=reference_path,
+        )
+
+    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
+        """Enregistre une observation de carte pour inspection ultérieure."""
+
+        card = Card()
+        card.apply_observation(
+            observation.value,
+            observation.suit,
+            observation.value_score,
+            observation.suit_score,
+        )
+        self.table.captures.record_observation(base_key, card)
    
    
    
