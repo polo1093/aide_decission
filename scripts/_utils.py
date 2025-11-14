@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from objet.utils.calibration import (
+    CardPatch,
     Region,
     clamp_bbox,
     clamp_top_left,
@@ -13,6 +14,7 @@ from objet.utils.calibration import (
 )
 
 __all__ = [
+    "CardPatch",
     "Region",
     "coerce_int",
     "clamp_bbox",
