@@ -37,7 +37,7 @@ import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
 
-from capture_cards import TemplateIndex, is_card_present, recognize_number_and_suit
+from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
 from _utils import extract_region_images, load_coordinates
 
 DEFAULT_NUMBERS: Sequence[str] = (
@@ -504,12 +504,12 @@ import tkinter as tk
 
 # Dépend de votre module existant
 # capture_cards: TemplateIndex, recognize_number_and_suit, extract_region_images, is_card_present
-from capture_cards import (
+from objet.scanner.cards_recognition import (
     TemplateIndex,
     recognize_number_and_suit,
-    extract_region_images,
     is_card_present,
 )
+from objet.utils.calibration import extract_region_images
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
