@@ -7,7 +7,7 @@ from objet.utils.calibration import (
     clamp_top_left,
     coerce_int,
     extract_patch,
-    extract_region_images,
+    collect_card_patches,
     load_coordinates,
     resolve_templates,
 )
@@ -20,5 +20,5 @@ __all__ = [
     "resolve_templates",
     "load_coordinates",
     "extract_patch",
-    "extract_region_images",
+    "collect_card_patches",
 ]

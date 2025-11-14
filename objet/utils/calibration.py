@@ -23,7 +23,7 @@ __all__ = [
     "resolve_templates",
     "load_coordinates",
     "extract_patch",
-    "extract_region_images",
+    "collect_card_patches",
 ]
 
 
@@ -212,7 +212,28 @@ def extract_patch(image: Image.Image, top_left: Tuple[int, int], size: Tuple[int
     return image.crop((x1, y1, x2, y2))
 
 
-def extract_region_images(
+def _region_group(region: Region | Mapping[str, Any]) -> str:
+    return region.group if isinstance(region, Region) else str(region.get("group", ""))
+
+
+def _region_geometry(region: Region | Mapping[str, Any]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    if isinstance(region, Region):
+        return region.top_left, region.size
+    top_left = region.get("top_left", [0, 0])
+    size = region.get("size", [0, 0])
+    tl_x = coerce_int(top_left[0])
+    tl_y = coerce_int(top_left[1])
+    width, height = 0, 0
+    if isinstance(size, Iterable):
+        values = list(size)
+        if values:
+            width = coerce_int(values[0])
+        if len(values) >= 2:
+            height = coerce_int(values[1])
+    return (tl_x, tl_y), (width, height)
+
+
+def collect_card_patches(
     table_img: Image.Image,
     regions: Mapping[str, Region | Mapping[str, Any]],
     *,
@@ -220,43 +241,38 @@ def extract_region_images(
     groups_numbers: Tuple[str, ...] = ("player_card_number", "board_card_number"),
     groups_suits: Tuple[str, ...] = ("player_card_symbol", "board_card_symbol"),
 ) -> Dict[str, Tuple[Image.Image, Image.Image]]:
-    """Return ``{base_key: (number_patch, suit_patch)}`` for cards regions."""
+    """Return ``{base_key: (number_patch, suit_patch)}`` for recognised card regions.
 
-    def group_of(region: Region | Mapping[str, Any]) -> str:
-        return region.group if isinstance(region, Region) else str(region.get("group", ""))
+    The implementation walks through *regions* a single time and relies on
+    :func:`extract_patch` to perform the actual cropping, keeping the
+    bookkeeping logic light-weight while still supporting both
+    :class:`Region` objects and plain ``dict`` entries.
+    """
 
-    def top_left_of(region: Region | Mapping[str, Any]) -> Tuple[int, int]:
-        if isinstance(region, Region):
-            return region.top_left
-        top_left = region.get("top_left", [0, 0])
-        return coerce_int(top_left[0]), coerce_int(top_left[1])
-
-    def size_of(region: Region | Mapping[str, Any]) -> Tuple[int, int]:
-        if isinstance(region, Region):
-            return region.size
-        size = region.get("size")
-        if isinstance(size, Iterable):
-            values = list(size)
-            if len(values) >= 2:
-                return coerce_int(values[0]), coerce_int(values[1])
-        return 0, 0
-
-    pairs: Dict[str, Dict[str, Image.Image]] = {}
+    slots: Dict[str, Dict[str, Image.Image]] = {}
 
     for key, region in regions.items():
-        if group_of(region) in groups_numbers:
-            patch = extract_patch(table_img, top_left_of(region), size_of(region), pad)
-            base = key.replace("_number", "")
-            pairs.setdefault(base, {})["number"] = patch
+        group = _region_group(region)
+        slot: Optional[str] = None
+        base_key: Optional[str] = None
+        if group in groups_numbers:
+            slot = "number"
+            base_key = key.replace("_number", "")
+        elif group in groups_suits:
+            slot = "symbol"
+            base_key = key.replace("_symbol", "")
+        else:
+            continue
 
-    for key, region in regions.items():
-        if group_of(region) in groups_suits:
-            patch = extract_patch(table_img, top_left_of(region), size_of(region), pad)
-            base = key.replace("_symbol", "")
-            pairs.setdefault(base, {})["symbol"] = patch
+        if not slot or not base_key:
+            continue
 
-    out: Dict[str, Tuple[Image.Image, Image.Image]] = {}
-    for base, mapping in pairs.items():
-        if "number" in mapping and "symbol" in mapping:
-            out[base] = (mapping["number"], mapping["symbol"])
-    return out
+        top_left, size = _region_geometry(region)
+        patch = extract_patch(table_img, top_left, size, pad)
+        slots.setdefault(base_key, {})[slot] = patch
+
+    return {
+        base: (patches["number"], patches["symbol"])
+        for base, patches in slots.items()
+        if "number" in patches and "symbol" in patches
+    }
