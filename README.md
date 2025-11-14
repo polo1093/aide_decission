@@ -55,10 +55,13 @@ flowchart LR
 
 To do list 
 
+Réfaire une séance de capture avec OBS . 
+Refaire les paramétrages et le crop de l'écran, et tout ça, les screen au bon endroit . 
+Ajoutez les boutons et le fond. 
+Tester l'OCR. 
 
-
-
-1.faire un script qui unifie les mains de position_zones_ctk puis Crop_Video_Frames puis identify_cards puis capture_cards, pr une configuratiion rapides
+Ajouter une fonction pour détecter un truc bizarre qui est affiché à l'écran. 
+Pour ajouter une fonction pour détecter si c'est à nous de jouer ou pas. 
 
 2.
 
