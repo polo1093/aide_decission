@@ -139,6 +139,8 @@ class ScanTable:
         self,
         position_value: Tuple[int, int, int, int],
         position_suit: Tuple[int, int, int, int],
+        *,
+        template_set: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[str], float, float]:
         """
         Retourne:
@@ -161,6 +163,7 @@ class ScanTable:
                 image_card_value,
                 image_card_suit,
                 self.template_index,
+                template_set=template_set,
             )
 
             conf_val = float(max(0.0, score_value or 0.0))

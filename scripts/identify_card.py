@@ -34,11 +34,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import customtkinter as ctk
-import numpy as np
 from PIL import Image, ImageTk
 
-from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
-from _utils import collect_card_patches, load_coordinates
+from objet.scanner.cards_recognition import (
+    ROOT_TEMPLATE_SET,
+    TemplateIndex,
+    is_card_present,
+    recognize_number_and_suit,
+)
+from _utils import CardPatch, collect_card_patches, load_coordinates
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -53,6 +57,7 @@ class CardSample:
     base_key: str
     number_patch: Image.Image
     suit_patch: Image.Image
+    template_set: Optional[str]
     number_suggestion: Optional[str]
     suit_suggestion: Optional[str]
     number_score: float
@@ -119,7 +124,10 @@ def collect_card_samples(
             continue
 
         card_pairs = collect_card_patches(table_img, regions, pad=0)
-        for base_key, (num_patch, suit_patch) in card_pairs.items():
+        for base_key, card_patch in card_pairs.items():
+            num_patch = card_patch.number
+            suit_patch = card_patch.suit
+            tpl_set = card_patch.template_set
             if not is_card_present(num_patch, threshold=215, min_ratio=0.04):
                 continue
             total_cards += 1
@@ -129,7 +137,10 @@ def collect_card_samples(
             trimmed_suit = _trim_patch(suit_patch, trim_border)
 
             suggestion_num, suggestion_suit, score_num, score_suit = recognize_number_and_suit(
-                trimmed_num, trimmed_suit, idx
+                trimmed_num,
+                trimmed_suit,
+                idx,
+                template_set=tpl_set,
             )
 
             # deux niveaux de confiance : acceptable vs strict autoskip
@@ -159,6 +170,7 @@ def collect_card_samples(
                     base_key=base_key,
                     number_patch=num_patch,
                     suit_patch=suit_patch,
+                    template_set=tpl_set,
                     number_suggestion=suggestion_num,
                     suit_suggestion=suggestion_suit,
                     number_score=float(score_num),
@@ -176,11 +188,22 @@ class DatasetWriter:
         self.idx = idx
         self.cards_root = Path(cards_root)
         self.cards_root.mkdir(parents=True, exist_ok=True)
-        (self.cards_root / "numbers").mkdir(parents=True, exist_ok=True)
-        (self.cards_root / "suits").mkdir(parents=True, exist_ok=True)
         self.trim_border = trim_border
         self.counter = itertools.count(1)
         self.saved: List[Tuple[Path, Path]] = []
+
+    def _normalise_template_set(self, template_set: Optional[str]) -> Optional[str]:
+        if template_set:
+            return template_set
+        default = self.idx.default_set
+        if default == ROOT_TEMPLATE_SET:
+            return None
+        return default
+
+    def _set_root(self, template_set: Optional[str]) -> Path:
+        if not template_set:
+            return self.cards_root
+        return self.cards_root / template_set
 
     def save(
         self,
@@ -196,28 +219,24 @@ class DatasetWriter:
         s_img = sample.trimmed_suit(self.trim_border)
         idx = next(self.counter)
         base_name = f"{sample.base_key}_{sample.source_path.stem}_{idx:04d}"
-        num_path = self.cards_root / "numbers" / number_label / f"{base_name}.png"
-        suit_path = self.cards_root / "suits" / suit_label / f"{base_name}.png"
+        resolved_set = self._normalise_template_set(sample.template_set)
+        set_root = self._set_root(resolved_set)
+        num_path = set_root / "numbers" / number_label / f"{base_name}.png"
+        suit_path = set_root / "suits" / suit_label / f"{base_name}.png"
         np_out: Optional[Path] = None
         sp_out: Optional[Path] = None
         if save_number:
             num_path.parent.mkdir(parents=True, exist_ok=True)
             n_img.save(num_path)
-            self._update_index(number_label, n_img, is_number=True)
+            self.idx.append_template(resolved_set, number_label, n_img, is_number=True)
             np_out = num_path
         if save_suit:
             suit_path.parent.mkdir(parents=True, exist_ok=True)
             s_img.save(suit_path)
-            self._update_index(suit_label, s_img, is_number=False)
+            self.idx.append_template(resolved_set, suit_label, s_img, is_number=False)
             sp_out = suit_path
         self.saved.append((np_out or Path(), sp_out or Path()))
         return np_out, sp_out
-
-    def _update_index(self, label: str, img: Image.Image, *, is_number: bool) -> None:
-        gray = np.array(img.convert("L"))
-        arr = TemplateIndex._prep(gray)
-        store = self.idx.numbers if is_number else self.idx.suits
-        store.setdefault(label, []).append(arr)
 
 
 class LabelingApp:
@@ -497,7 +516,6 @@ from typing import Optional, Tuple, Sequence, Dict
 import itertools
 import time
 
-import numpy as np
 from PIL import Image, ImageTk
 import customtkinter as ctk
 import tkinter as tk
@@ -505,11 +523,12 @@ import tkinter as tk
 # Dépend de votre module existant
 # capture_cards: TemplateIndex, recognize_number_and_suit, collect_card_patches, is_card_present
 from objet.scanner.cards_recognition import (
+    ROOT_TEMPLATE_SET,
     TemplateIndex,
     recognize_number_and_suit,
     is_card_present,
 )
-from objet.utils.calibration import collect_card_patches
+from objet.utils.calibration import CardPatch, collect_card_patches
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -647,6 +666,15 @@ class CardIdentifier:
         self.idx = TemplateIndex(self.cards_root)
         self.idx.load()
         self._counter = itertools.count(1)
+        self._last_template_set: Optional[str] = None
+
+    def _normalise_template_set(self, template_set: Optional[str]) -> Optional[str]:
+        if template_set:
+            return template_set
+        if self._last_template_set:
+            return self._last_template_set
+        default = self.idx.default_set
+        return None if default == ROOT_TEMPLATE_SET else default
 
     # ---------- API principale (patches) ----------
     def identify_from_patches(
@@ -655,13 +683,20 @@ class CardIdentifier:
         suit_patch: Image.Image,
         *,
         base_key: str = "live",
+        template_set: Optional[str] = None,
         interactive: bool = True,
         force_all: bool = False,
     ) -> IdentifyResult:
         # 1) Trim puis tentative de reco
         tnum = _trim(number_patch, self.trim)
         tsuit = _trim(suit_patch, self.trim)
-        num_s, suit_s, s_num, s_suit = recognize_number_and_suit(tnum, tsuit, self.idx)
+        tpl_set = template_set or self._normalise_template_set(None)
+        num_s, suit_s, s_num, s_suit = recognize_number_and_suit(
+            tnum,
+            tsuit,
+            self.idx,
+            template_set=tpl_set,
+        )
 
         num_known_strict = bool(num_s) and float(s_num) >= self.strict
         suit_known_strict = bool(suit_s) and float(s_suit) >= self.strict
@@ -698,12 +733,21 @@ class CardIdentifier:
             lab_num, lab_suit = out
             save_number = missing_number and lab_num not in {"", "?"}
             save_suit = missing_suit and lab_suit not in {"", "?"}
-            self._save_if_missing(tnum, tsuit, lab_num, lab_suit, save_number, save_suit, base_key)
+            self._save_if_missing(
+                tnum,
+                tsuit,
+                lab_num,
+                lab_suit,
+                save_number,
+                save_suit,
+                base_key,
+                tpl_set,
+            )
             # MAJ index pour la session courante
             if save_number:
-                self._update_index(lab_num, tnum, is_number=True)
+                self._update_index(lab_num, tnum, is_number=True, template_set=tpl_set)
             if save_suit:
-                self._update_index(lab_suit, tsuit, is_number=False)
+                self._update_index(lab_suit, tsuit, is_number=False, template_set=tpl_set)
             return IdentifyResult(lab_num or (num_s or "?"), lab_suit or (suit_s or "?"), {
                 "source": "labeled",
                 "score_number": float(s_num),
@@ -728,15 +772,16 @@ class CardIdentifier:
         force_all: bool = False,
     ) -> IdentifyResult:
         pairs = collect_card_patches(table_img.convert("RGB"), regions, pad=0)
-        if base_key not in pairs:
+        card_patch = pairs.get(base_key)
+        if not card_patch:
             return IdentifyResult("?", "?", {"source": "error", "reason": "region-missing"})
-        num_patch, suit_patch = pairs[base_key]
-        if not is_card_present(num_patch, threshold=215, min_ratio=0.04):
+        if not is_card_present(card_patch.number, threshold=215, min_ratio=0.04):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "no-card"})
         return self.identify_from_patches(
-            num_patch,
-            suit_patch,
+            card_patch.number,
+            card_patch.suit,
             base_key=base_key,
+            template_set=card_patch.template_set,
             interactive=interactive,
             force_all=force_all,
         )
@@ -751,23 +796,35 @@ class CardIdentifier:
         save_number: bool,
         save_suit: bool,
         base_key: str,
+        template_set: Optional[str],
     ) -> None:
         ts = int(time.time())
         idx = next(self._counter)
         base = f"{base_key}_{ts}_{idx:04d}"
+        resolved_set = self._normalise_template_set(template_set)
+        self._last_template_set = resolved_set
+        if resolved_set:
+            root = self.cards_root / resolved_set
+        else:
+            root = self.cards_root
         if save_number:
-            p = self.cards_root / "numbers" / number_label / f"{base}.png"
+            p = root / "numbers" / number_label / f"{base}.png"
             p.parent.mkdir(parents=True, exist_ok=True)
             num_img.save(p)
         if save_suit:
-            p = self.cards_root / "suits" / suit_label / f"{base}.png"
+            p = root / "suits" / suit_label / f"{base}.png"
             p.parent.mkdir(parents=True, exist_ok=True)
             suit_img.save(p)
 
-    def _update_index(self, label: str, img: Image.Image, *, is_number: bool) -> None:
-        gray = np.array(img.convert("L"))
-        arr = TemplateIndex._prep(gray)
-        store = self.idx.numbers if is_number else self.idx.suits
-        store.setdefault(label, []).append(arr)
+    def _update_index(
+        self,
+        label: str,
+        img: Image.Image,
+        *,
+        is_number: bool,
+        template_set: Optional[str],
+    ) -> None:
+        resolved_set = self._normalise_template_set(template_set)
+        self.idx.append_template(resolved_set, label, img, is_number=is_number)
 
 

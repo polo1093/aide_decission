@@ -31,7 +31,7 @@ for root in (PROJECT_ROOT, SCRIPTS_ROOT):
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-from _utils import collect_card_patches, load_coordinates
+from _utils import CardPatch, collect_card_patches, load_coordinates
 from crop_core import crop_from_size_and_offset
 from objet.scanner.cards_recognition import (
     CardObservation,
@@ -151,12 +151,19 @@ def main_cards_validate(argv: Optional[list] = None) -> int:
     # 4) Reconnaissance
     ok = True
     debug_dir = auto["game_dir"] / "debug" / "cards"
-    for base_key, (patch_num, patch_suit) in pairs.items():
+    for base_key, card_patch in pairs.items():
+        patch_num = card_patch.number
+        patch_suit = card_patch.suit
         # filtre présence
         if not is_card_present(patch_num):  # si la zone nombre semble vide, on ignore la carte
             print(f"{base_key}: probably empty (skip)")
             continue
-        val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, idx)
+        val, suit, s_val, s_suit = recognize_number_and_suit(
+            patch_num,
+            patch_suit,
+            idx,
+            template_set=card_patch.template_set,
+        )
 
         obs = CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture")
         if hasattr(game, "add_card_observation"):
@@ -319,10 +326,17 @@ class TableController:
         pairs = collect_card_patches(crop, self.regions, pad=4)
 
         # 3) matching + mise à jour d'état
-        for base_key, (patch_num, patch_suit) in pairs.items():
+        for base_key, card_patch in pairs.items():
+            patch_num = card_patch.number
+            patch_suit = card_patch.suit
             if not is_card_present(patch_num):
                 continue
-            val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, self.idx)
+            val, suit, s_val, s_suit = recognize_number_and_suit(
+                patch_num,
+                patch_suit,
+                self.idx,
+                template_set=card_patch.template_set,
+            )
             obs = CardObservation(val, suit, s_val, s_suit, source="capture")
             self.state.update(
                 base_key,
@@ -367,19 +381,39 @@ class VideoFrameSource:
 
 
 class SampleSink:
-    """Sauvegarde les extraits non reconnus vers config/<game>/unlabeled/{numbers|suits}/."""
+    """Sauvegarde les extraits non reconnus vers config/<game>/unlabeled/…"""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
-    def save_number(self, key: str, img: Image.Image, frame_idx: int) -> Path:
-        p = self.root / "unlabeled" / "numbers" / f"{key}_{frame_idx}.png"
+    def _unlabeled_root(self, template_set: Optional[str]) -> Path:
+        base = self.root / "unlabeled"
+        if template_set:
+            return base / template_set
+        return base
+
+    def save_number(
+        self,
+        key: str,
+        img: Image.Image,
+        frame_idx: int,
+        template_set: Optional[str] = None,
+    ) -> Path:
+        root = self._unlabeled_root(template_set)
+        p = root / "numbers" / f"{key}_{frame_idx}.png"
         p.parent.mkdir(parents=True, exist_ok=True)
         img.save(p)
         return p
 
-    def save_suit(self, key: str, img: Image.Image, frame_idx: int) -> Path:
-        p = self.root / "unlabeled" / "suits" / f"{key}_{frame_idx}.png"
+    def save_suit(
+        self,
+        key: str,
+        img: Image.Image,
+        frame_idx: int,
+        template_set: Optional[str] = None,
+    ) -> Path:
+        root = self._unlabeled_root(template_set)
+        p = root / "suits" / f"{key}_{frame_idx}.png"
         p.parent.mkdir(parents=True, exist_ok=True)
         img.save(p)
         return p
@@ -389,14 +423,26 @@ class InteractiveLabeler:
     def __init__(self, cards_root: Path) -> None:
         self.cards_root = Path(cards_root)
 
-    def add_number(self, img_path: Path, label: str) -> Path:
-        dst = self.cards_root / "numbers" / label / img_path.name
+    def add_number(
+        self,
+        img_path: Path,
+        label: str,
+        template_set: Optional[str] = None,
+    ) -> Path:
+        root = self.cards_root / template_set if template_set else self.cards_root
+        dst = root / "numbers" / label / img_path.name
         dst.parent.mkdir(parents=True, exist_ok=True)
         Image.open(img_path).save(dst)
         return dst
 
-    def add_suit(self, img_path: Path, label: str) -> Path:
-        dst = self.cards_root / "suits" / label / img_path.name
+    def add_suit(
+        self,
+        img_path: Path,
+        label: str,
+        template_set: Optional[str] = None,
+    ) -> Path:
+        root = self.cards_root / template_set if template_set else self.cards_root
+        dst = root / "suits" / label / img_path.name
         dst.parent.mkdir(parents=True, exist_ok=True)
         Image.open(img_path).save(dst)
         return dst
@@ -439,14 +485,16 @@ def main_video_validate(argv: Optional[list] = None) -> int:
         # stocker les inconnus (option basique: si zone présente mais non stable)
         crop, _ = crop_from_size_and_offset(frame, ctrl.size, ctrl.ref_offset, reference_img=ctrl.ref_img)
         pairs = collect_card_patches(crop, ctrl.regions, pad=4)
-        for base_key, (patch_num, patch_suit) in pairs.items():
+        for base_key, card_patch in pairs.items():
+            patch_num = card_patch.number
+            patch_suit = card_patch.suit
             if not is_card_present(patch_num):
                 continue
             st = ctrl.state.cards.get(base_key)
             if not st or st.stable == 0:
                 # pas encore reconnu → on garde un échantillon pour labellisation ultérieure
-                sink.save_number(base_key, patch_num, i)
-                sink.save_suit(base_key, patch_suit, i)
+                sink.save_number(base_key, patch_num, i, template_set=card_patch.template_set)
+                sink.save_suit(base_key, patch_suit, i, template_set=card_patch.template_set)
 
         # Affiche un résumé court
         pretty = ", ".join(
