@@ -33,6 +33,12 @@ for root in (PROJECT_ROOT, SCRIPTS_ROOT):
 
 from _utils import extract_region_images, load_coordinates
 from crop_core import crop_from_size_and_offset
+from objet.scanner.cards_recognition import (
+    CardObservation,
+    TemplateIndex,
+    is_card_present,
+    recognize_number_and_suit,
+)
 
 if TYPE_CHECKING:  # hints uniquement
     from objet.services.game import Game
@@ -42,167 +48,9 @@ if TYPE_CHECKING:  # hints uniquement
 # Modèle / observations de cartes
 # ==============================
 
-@dataclass
-class CardObservation:
-    """Observation brute d'une carte (issue de la capture)."""
+# Les classes et fonctions de reconnaissance sont fournies par
+# ``objet.scanner.cards_recognition`` pour éviter les imports circulaires.
 
-    value: Optional[str]
-    suit: Optional[str]
-    value_score: float
-    suit_score: float
-    source: str = "capture"
-
-
-def is_card_present(patch, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
-    """Heuristique simple : proportion de pixels *très clairs* sur la zone.
-
-    `patch` peut être soit un ``PIL.Image.Image``, soit un ``np.ndarray`` (2D ou 3D).
-
-    - threshold: niveau (0–255) à partir duquel un pixel est considéré "blanc".
-    - min_ratio: ratio minimal de pixels blancs (ex: 0.08 = 8 %).
-    """
-
-    # Cas numpy : on accepte directement les arrays OpenCV (gris ou BGR/RGB)
-    if isinstance(patch, np.ndarray):
-        arr = patch
-        if arr.ndim == 2:
-            # Image en niveaux de gris (H, W)
-            arr_u8 = arr.astype(np.uint8, copy=False)
-            white = arr_u8 >= threshold
-            ratio = float(white.mean())
-            return ratio >= float(min_ratio)
-        elif arr.ndim == 3:
-            # 3 canaux : on ne se préoccupe pas de l'ordre BGR/RGB, 
-            # le test ">= threshold" sur tous les canaux reste valide.
-            arr_u8 = arr.astype(np.uint8, copy=False)
-        else:
-            raise ValueError(f"Unsupported array shape for card presence: {arr.shape}")
-    elif isinstance(patch, Image.Image):
-        # Cas PIL classique
-        arr_u8 = np.array(patch.convert("RGB"), dtype=np.uint8)
-    else:
-        raise TypeError(f"Unsupported patch type for card presence: {type(patch)!r}")
-
-    if arr_u8.ndim == 2:
-        white = arr_u8 >= threshold
-    else:
-        white = np.all(arr_u8 >= threshold, axis=2)
-
-    ratio = float(white.mean())
-    return ratio >= float(min_ratio)
-
-
-# ==============================
-# Index de templates (chiffres / symboles)
-# ==============================
-
-
-class TemplateIndex:
-    """Charge les gabarits de chiffres/figures et de symboles depuis config/<game>/cards.
-
-    Dossier attendu:
-      cards/numbers/<VALUE>/*.png
-      cards/suits/<SUIT>/*.png
-    """
-
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
-        self.numbers: Dict[str, List[np.ndarray]] = {}
-        self.suits: Dict[str, List[np.ndarray]] = {}
-
-    @staticmethod
-    def _prep(gray: np.ndarray) -> np.ndarray:
-        # Hook éventuel : normalisation, binarisation, resize, etc.
-        return gray
-
-    @staticmethod
-    def _imread_gray(p: Path) -> Optional[np.ndarray]:
-        try:
-            img = Image.open(p).convert("L")
-            return np.array(img)
-        except Exception:
-            return None
-
-    def _load_dir(self, sub: str) -> Dict[str, List[np.ndarray]]:
-        base = self.root / sub
-        out: Dict[str, List[np.ndarray]] = {}
-        if not base.exists():
-            return out
-        for label_dir in sorted(base.iterdir()):
-            if not label_dir.is_dir():
-                continue
-            label = label_dir.name
-            imgs: List[np.ndarray] = []
-            for f in sorted(label_dir.glob("*.png")):
-                g = self._imread_gray(f)
-                if g is not None:
-                    imgs.append(self._prep(g))
-            if imgs:
-                out[label] = imgs
-        return out
-
-    def load(self) -> None:
-        self.numbers = self._load_dir("numbers")
-        self.suits = self._load_dir("suits")
-
-    def check_missing(
-        self,
-        expect_numbers: Optional[List[str]] = None,
-        expect_suits: Optional[List[str]] = None,
-    ) -> Dict[str, List[str]]:
-        miss: Dict[str, List[str]] = {"numbers": [], "suits": []}
-        if expect_numbers:
-            for v in expect_numbers:
-                if v not in self.numbers:
-                    miss["numbers"].append(v)
-        if expect_suits:
-            for s in expect_suits:
-                if s not in self.suits:
-                    miss["suits"].append(s)
-        return miss
-
-
-def _to_gray(img: Image.Image) -> np.ndarray:
-    return cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
-
-
-def match_best(gray_img: np.ndarray, templates: List[np.ndarray], method: int = cv2.TM_CCOEFF_NORMED) -> float:
-    best = -1.0
-    for tpl in templates:
-        if gray_img.shape[0] < tpl.shape[0] or gray_img.shape[1] < tpl.shape[1]:
-            # si le template est plus grand que l'extrait, on saute (ou on pourrait resize)
-            continue
-        res = cv2.matchTemplate(gray_img, tpl, method)
-        _, score, _, _ = cv2.minMaxLoc(res)
-        best = max(best, float(score))
-    return best
-
-
-def recognize_number_and_suit(
-    number_patch: Image.Image,
-    suit_patch: Image.Image,
-    idx: TemplateIndex,
-) -> Tuple[Optional[str], Optional[str], float, float]:
-    """Retourne (value, suit, score_value, score_suit)."""
-
-    g_num = _to_gray(number_patch)
-    g_suit = _to_gray(suit_patch)
-
-    best_num, best_num_score = None, -1.0
-    for label, tpls in idx.numbers.items():
-        score = match_best(g_num, tpls)
-        if score > best_num_score:
-            best_num_score = score
-            best_num = label
-
-    best_suit, best_suit_score = None, -1.0
-    for label, tpls in idx.suits.items():
-        score = match_best(g_suit, tpls)
-        if score > best_suit_score:
-            best_suit_score = score
-            best_suit = label
-
-    return best_num, best_suit, best_num_score, best_suit_score
 
 
 # ==============================

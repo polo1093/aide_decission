@@ -16,9 +16,10 @@ if str(PROJECT_ROOT) not in sys.path:
 import tool
 from objet.entities.card import Card
 from objet.services.table import Table
+from objet.scanner.cards_recognition import CardObservation
 from objet.state import ButtonsState, CardsState, CaptureState, MetricsState
 
-from scripts.state_requirements import SCRIPT_STATE_USAGE, StatePortion
+from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
 LOGGER = logging.getLogger(__name__)
 
