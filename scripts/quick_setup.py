@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple, cast
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -74,7 +74,19 @@ def _run_capture_video(
     suit_th: float,
     require_k: int,
 ) -> int:
-    from capture_cards import main as capture_main
+    import importlib
+
+    module = importlib.import_module("capture_cards")
+
+    capture_entry: Callable[[Sequence[str]], int]
+    if hasattr(module, "main"):
+        capture_entry = cast(Callable[[Sequence[str]], int], getattr(module, "main"))
+    elif hasattr(module, "main_video_validate"):
+        capture_entry = cast(
+            Callable[[Sequence[str]], int], getattr(module, "main_video_validate")
+        )
+    else:  # pragma: no cover - dépend de l'environnement utilisateur
+        raise SystemExit("capture_cards ne fournit ni main() ni main_video_validate().")
 
     argv: List[str] = [
         "--game",
@@ -94,7 +106,7 @@ def _run_capture_video(
         argv += ["--video", video]
     else:
         raise SystemExit("La validation vidéo nécessite --video.")
-    return int(capture_main(argv))
+    return int(capture_entry(argv))
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
