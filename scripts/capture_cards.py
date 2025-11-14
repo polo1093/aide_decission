@@ -31,7 +31,7 @@ for root in (PROJECT_ROOT, SCRIPTS_ROOT):
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-from _utils import extract_region_images, load_coordinates
+from _utils import collect_card_patches, load_coordinates
 from crop_core import crop_from_size_and_offset
 from objet.scanner.cards_recognition import (
     CardObservation,
@@ -139,7 +139,7 @@ def main_cards_validate(argv: Optional[list] = None) -> int:
     )
 
     # 3) Extraire patches cartes
-    pairs = extract_region_images(table_img, regions, pad=int(args.pad))
+    pairs = collect_card_patches(table_img, regions, pad=int(args.pad))
     if not pairs:
         print("No card regions found (check coordinates.json groups)")
         return 2
@@ -312,7 +312,7 @@ class TableController:
         )
 
         # 2) extractions number/symbol
-        pairs = extract_region_images(crop, self.regions, pad=4)
+        pairs = collect_card_patches(crop, self.regions, pad=4)
 
         # 3) matching + mise à jour d'état
         for base_key, (patch_num, patch_suit) in pairs.items():
@@ -434,7 +434,7 @@ def main_video_validate(argv: Optional[list] = None) -> int:
 
         # stocker les inconnus (option basique: si zone présente mais non stable)
         crop, _ = crop_from_size_and_offset(frame, ctrl.size, ctrl.ref_offset, reference_img=ctrl.ref_img)
-        pairs = extract_region_images(crop, ctrl.regions, pad=4)
+        pairs = collect_card_patches(crop, ctrl.regions, pad=4)
         for base_key, (patch_num, patch_suit) in pairs.items():
             if not is_card_present(patch_num):
                 continue

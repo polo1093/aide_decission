@@ -38,7 +38,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
-from _utils import extract_region_images, load_coordinates
+from _utils import collect_card_patches, load_coordinates
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -118,7 +118,7 @@ def collect_card_samples(
         except FileNotFoundError:
             continue
 
-        card_pairs = extract_region_images(table_img, regions, pad=0)
+        card_pairs = collect_card_patches(table_img, regions, pad=0)
         for base_key, (num_patch, suit_patch) in card_pairs.items():
             if not is_card_present(num_patch, threshold=215, min_ratio=0.04):
                 continue
@@ -503,13 +503,13 @@ import customtkinter as ctk
 import tkinter as tk
 
 # Dépend de votre module existant
-# capture_cards: TemplateIndex, recognize_number_and_suit, extract_region_images, is_card_present
+# capture_cards: TemplateIndex, recognize_number_and_suit, collect_card_patches, is_card_present
 from objet.scanner.cards_recognition import (
     TemplateIndex,
     recognize_number_and_suit,
     is_card_present,
 )
-from objet.utils.calibration import extract_region_images
+from objet.utils.calibration import collect_card_patches
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -727,7 +727,7 @@ class CardIdentifier:
         interactive: bool = True,
         force_all: bool = False,
     ) -> IdentifyResult:
-        pairs = extract_region_images(table_img.convert("RGB"), regions, pad=0)
+        pairs = collect_card_patches(table_img.convert("RGB"), regions, pad=0)
         if base_key not in pairs:
             return IdentifyResult("?", "?", {"source": "error", "reason": "region-missing"})
         num_patch, suit_patch = pairs[base_key]
