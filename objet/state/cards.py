@@ -75,7 +75,8 @@ class CardsState:
 
         if not self.board:
             self.board = [
-                Card(card_coordinates=_card_box_from_regions(regions, f"board_card_{i}"))
+                Card(card_coordinates_value=_card_box_from_regions(regions, f"board_card_{i}_number"),
+                     card_coordinates_suit=_card_box_from_regions(regions, f"board_card_{i}_symbol"))
                 for i in range(1, 6)
             ]
 

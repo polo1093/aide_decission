@@ -24,7 +24,8 @@ SUIT_ALIASES = {
 @dataclass
 class Card:
     """Observation d'une carte et conversion vers l'objet PokerCard."""
-    card_coordinates: Optional[tuple[int, int, int, int]] = None
+    card_coordinates_value: Optional[tuple[int, int, int, int]] = None
+    card_coordinates_suit: Optional[tuple[int, int, int, int]] = None
     value: Optional[str] = None
     suit: Optional[str] = None
     value_score: Optional[float] = None

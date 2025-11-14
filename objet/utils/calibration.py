@@ -260,3 +260,5 @@ def extract_region_images(
         if "number" in mapping and "symbol" in mapping:
             out[base] = (mapping["number"], mapping["symbol"])
     return out
+
+

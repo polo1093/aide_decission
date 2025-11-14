@@ -124,7 +124,7 @@ class ScanTable:
     # ------------------------------------------------------------------
     # Scan des cartes dans la table (identique à ta version, basé sur screen_crop)
     # ------------------------------------------------------------------
-    def scan_carte(self, position):
+    def scan_carte(self, position_value: Tuple[int, int, int, int],position_suit ) -> Tuple[Optional[str], Optional[str], float, float]:
         """
         Retourne:
             (value, suit, confidence_value, confidence_suit)
@@ -132,145 +132,39 @@ class ScanTable:
         - value, suit : str ou None
         - confidence_* : float entre 0.0 et 1.0
         """
-        # Toujours renvoyer 4 valeurs
-        if self.screen_crop is None or position is None:
-            return None, None, 0.0, 0.0
 
-        try:
-            x, y, w, h = position
-        except Exception:
-            logging.warning("scan_carte: position attendue comme (x, y, w, h)")
-            return None, None, 0.0, 0.0
-
-        pad = 3
         h_img, w_img = self.screen_crop.shape[:2]
 
+
+            
+
+        # crops séparés pour la valeur et le symbole
+        image_card_value = _crop_box_gray(position_value)
+        image_card_suit = _crop_box_gray(position_suit)
+
+
+        if is_card_present(image_card_gray):
+            value, suit, score_value, score_suit = recognize_number_and_suit(image_card_value,image_card_suit) # manque un argument  sans dout pour la suit
+
+            # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
+            conf_val = 1.0 if carte_value is not None else 0.0
+            conf_suit = 1.0 if carte_suit is not None else 0.0
+            return carte_value, carte_suit, conf_val, conf_suit
+        return None, None, 0.0, 0.0
+
+
+    def _crop_box_gray(box, pad=3):
+        """Retourne un crop (numpy BGR) pour box=(x,y,w,h) avec padding et clamp."""
+        x, y, w, h = box
         x0 = max(0, int(x - pad))
         y0 = max(0, int(y - pad))
         x1 = min(w_img, int(x + w + pad))
         y1 = min(h_img, int(y + h + pad))
-
-        if x0 >= x1 or y0 >= y1:
-            return None, None, 0.0, 0.0
-
-        image_card = self.screen_crop[y0:y1, x0:x1]
-
-        # Conversion vers le gris pour la détection
+        img = self.screen_crop[y0:y1, x0:x1].copy()
         if image_card.ndim == 3:
-            image_card_gray = cv2.cvtColor(image_card, cv2.COLOR_BGR2GRAY)
-        else:
-            image_card_gray = image_card
-
-        # ------------------------
-        # Voie principale OCR cartes
-        # ------------------------
-        try:
-            if is_card_present(image_card_gray):
-                value, suit, score_value, score_suit = recognize_number_and_suit_with_templates(image_card_gray)
-
-                # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
-                conf_val = 1.0 if carte_value is not None else 0.0
-                conf_suit = 1.0 if carte_suit is not None else 0.0
-                return carte_value, carte_suit, conf_val, conf_suit
-
-        except Exception as e:
-            logging.exception("Erreur lors de la reconnaissance de la carte: %s", e)
-
-        # ------------------------
-        # Fallback TemplateIndex
-        # ------------------------
-        try:
-            best_val = None
-            best_suit = None
-            best_score_val = 0.0
-            best_score_suit = 0.0
-
-            nums = None
-            suits = None
-            if hasattr(TemplateIndex, "number_templates") and hasattr(TemplateIndex, "suit_templates"):
-                nums = TemplateIndex.number_templates
-                suits = TemplateIndex.suit_templates
-            elif hasattr(TemplateIndex, "templates"):
-                nums = {}
-                suits = {}
-                for k, tmpl in TemplateIndex.templates.items():
-                    if "_" in k:
-                        val, su = k.split("_", 1)
-                        nums.setdefault(val, []).append(tmpl)
-                        suits.setdefault(su, []).append(tmpl)
-                    else:
-                        nums.setdefault(k, []).append(tmpl)
-            elif hasattr(TemplateIndex, "get_templates"):
-                t = TemplateIndex.get_templates()
-                if isinstance(t, dict):
-                    nums = {}
-                    suits = {}
-                    for k, tmpl in t.items():
-                        if "_" in k:
-                            val, su = k.split("_", 1)
-                            nums.setdefault(val, []).append(tmpl)
-                            suits.setdefault(su, []).append(tmpl)
-                        else:
-                            nums.setdefault(k, []).append(tmpl)
-
-            if not nums:
-                raise RuntimeError("No templates available for fallback recognition")
-
-            # Matcher les valeurs
-            for val, tlist in nums.items():
-                for tmpl in (tlist if isinstance(tlist, list) else [tlist]):
-                    if tmpl is None:
-                        continue
-                    tmpl_gray = tmpl if tmpl.ndim == 2 else cv2.cvtColor(tmpl, cv2.COLOR_BGR2GRAY)
-                    if tmpl_gray.shape[0] > image_card_gray.shape[0] or tmpl_gray.shape[1] > image_card_gray.shape[1]:
-                        continue
-                    res = cv2.matchTemplate(image_card_gray, tmpl_gray, cv2.TM_CCOEFF_NORMED)
-                    _, maxv, _, _ = cv2.minMaxLoc(res)
-                    if maxv > best_score_val:
-                        best_score_val = maxv
-                        best_val = val
-
-            # Matcher les couleurs/symboles si on en a
-            if suits:
-                for suit, tlist in suits.items():
-                    for tmpl in (tlist if isinstance(tlist, list) else [tlist]):
-                        if tmpl is None:
-                            continue
-                        tmpl_gray = tmpl if tmpl.ndim == 2 else cv2.cvtColor(tmpl, cv2.COLOR_BGR2GRAY)
-                        if tmpl_gray.shape[0] > image_card_gray.shape[0] or tmpl_gray.shape[1] > image_card_gray.shape[1]:
-                            continue
-                        res = cv2.matchTemplate(image_card_gray, tmpl_gray, cv2.TM_CCOEFF_NORMED)
-                        _, maxv, _, _ = cv2.minMaxLoc(res)
-                        if maxv > best_score_suit:
-                            best_score_suit = maxv
-                            best_suit = suit
-
-            # Seuils minimaux pour accepter le fallback
-            if best_val and best_suit and best_score_val > 0.4 and best_score_suit > 0.3:
-                logging.warning(
-                    "Fallback: carte approchée détectée %s de %s (scores %.2f / %.2f)",
-                    best_val,
-                    best_suit,
-                    best_score_val,
-                    best_score_suit,
-                )
-                return best_val, best_suit, float(best_score_val), float(best_score_suit)
-
-            elif best_val and best_score_val > 0.45 and not best_suit:
-                logging.warning(
-                    "Fallback: valeur approchée détectée %s (score %.2f)",
-                    best_val,
-                    best_score_val,
-                )
-                return best_val, None, float(best_score_val), 0.0
-
-        except Exception:
-            logging.debug("Fallback template-matching a échoué", exc_info=True)
-
-        # Si tout a échoué
-        return None, None, 0.0, 0.0
-
-
+            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return img
+    
     # Stubs à compléter plus tard
     def scan_pot(self, position):
         _ = self.screen_crop
