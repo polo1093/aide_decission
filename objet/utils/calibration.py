@@ -267,8 +267,12 @@ def collect_card_patches(
         if not slot or not base_key:
             continue
 
+        top_left, size = _region_geometry(region)
+        patch = extract_patch(table_img, top_left, size, pad=pad)
+        slots.setdefault(base_key, {})[slot] = patch
+
     out: Dict[str, Tuple[Image.Image, Image.Image]] = {}
-    for base, mapping in pairs.items():
+    for base, mapping in slots.items():
         if "number" in mapping and "symbol" in mapping:
             out[base] = (mapping["number"], mapping["symbol"])
     return out
