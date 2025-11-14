@@ -28,7 +28,7 @@ class ScanTable:
     - screen_array / screen_crop en BGR (convention OpenCV).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, value_threshold: float = 0.75, suit_threshold: float = 0.75) -> None:
         # --- Config / calibration ---
         self.coord_path = DEFAULT_COORD_PATH
         _, _, table_capture = load_coordinates(self.coord_path)
@@ -52,6 +52,8 @@ class ScanTable:
         self.scan_string: str = "init"
         self.cards_root = DEFAULT_CARDS_ROOT
         self.template_index = TemplateIndex(self.cards_root)
+        self.template_index.load()
+        self.set_thresholds(value_threshold=value_threshold, suit_threshold=suit_threshold)
         # Première capture
         self.screen_refresh()
 
@@ -127,7 +129,17 @@ class ScanTable:
     # ------------------------------------------------------------------
     # Scan des cartes dans la table (identique à ta version, basé sur screen_crop)
     # ------------------------------------------------------------------
-    def scan_carte(self, position_value: Tuple[int, int, int, int],position_suit ) -> Tuple[Optional[str], Optional[str], float, float]:
+    def set_thresholds(self, *, value_threshold: float, suit_threshold: float) -> None:
+        """Définit les seuils de similarité (0-1) utilisés pour valider valeur et symbole."""
+
+        self.value_threshold = float(max(0.0, min(1.0, value_threshold)))
+        self.suit_threshold = float(max(0.0, min(1.0, suit_threshold)))
+
+    def scan_carte(
+        self,
+        position_value: Tuple[int, int, int, int],
+        position_suit: Tuple[int, int, int, int],
+    ) -> Tuple[Optional[str], Optional[str], float, float]:
         """
         Retourne:
             (value, suit, confidence_value, confidence_suit)
@@ -136,26 +148,28 @@ class ScanTable:
         - confidence_* : float entre 0.0 et 1.0
         """
 
-        h_img, w_img = self.screen_crop.shape[:2]
-
-
-            
+        if self.screen_crop is None:
+            logging.debug("scan_carte appelé sans crop disponible")
+            return None, None, 0.0, 0.0
 
         # crops séparés pour la valeur et le symbole
         image_card_value = self._crop_box_gray(position_value)
         image_card_suit = self._crop_box_gray(position_suit)
 
-        
-        # rgb = cv2.cvtColor(image_card_value, cv2.COLOR_BGR2RGB)
-        # Image.fromarray(rgb).show()
-        
         if is_card_present(image_card_value):
-            carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(image_card_value,image_card_suit,self.template_index) # manque un argument  sans dout pour la suit
+            carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(
+                image_card_value,
+                image_card_suit,
+                self.template_index,
+            )
 
-            # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
-            conf_val = 1.0 if carte_value is not None else 0.0
-            conf_suit = 1.0 if carte_suit is not None else 0.0
-            return carte_value, carte_suit, conf_val, conf_suit
+            conf_val = float(max(0.0, score_value or 0.0))
+            conf_suit = float(max(0.0, score_suit or 0.0))
+
+            value_ok = carte_value if (carte_value and conf_val >= self.value_threshold) else None
+            suit_ok = carte_suit if (carte_suit and conf_suit >= self.suit_threshold) else None
+
+            return value_ok, suit_ok, conf_val, conf_suit
         return None, None, 0.0, 0.0
 
 

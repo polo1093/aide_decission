@@ -44,7 +44,9 @@ class Game:
     
 
     def update_from_scan(self) -> None:
-        pass
+        """Met à jour l'état du jeu à partir du dernier scan."""
+        # TODO: compléter lorsque les métriques / boutons seront branchés
+        return None
    
    
    
@@ -112,8 +114,6 @@ class Game:
             },
         }
 
-    # Ancien nom conservé pour compatibilité éventuelle
-    scan_to_data_table = update_from_scan
 
 
 __all__ = [
