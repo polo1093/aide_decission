@@ -12,8 +12,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 from scripts._utils import load_coordinates
 from scripts.pyauto_helpers import locate_in_image
-from scripts.capture_cards import TemplateIndex, is_card_present, recognize_number_and_suit
 
+from scripts.capture_cards import (
+    TemplateIndex,
+    is_card_present,
+    recognize_number_and_suit as recognize_number_and_suit_with_templates,
+)
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 
@@ -165,7 +169,7 @@ class ScanTable:
         # ------------------------
         try:
             if is_card_present(image_card_gray):
-                carte_value, carte_suit = recognize_number_and_suit(image_card_gray)
+                value, suit, score_value, score_suit = recognize_number_and_suit_with_templates(image_card_gray)
 
                 # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
                 conf_val = 1.0 if carte_value is not None else 0.0
