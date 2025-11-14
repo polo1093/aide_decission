@@ -1,5 +1,5 @@
 # Bundle — aide_decission
-_Généré le 2025-11-11 21:39:31_
+_Généré le 2025-11-14 13:17:37_
 
 ## Fichiers
 
@@ -45,161 +45,63 @@ class Timer():
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UI orchestration (Part A, non-demo, FIXED)
-=========================================
+UI simple pour exécuter périodiquement Controller.main()
+=======================================================
 
-- Boucle Tkinter non bloquante (`after`), Start/Stop/Snapshot, interval paramétrable.
-- Aucune donnée simulée : on n'affiche *que* ce que renvoie le scanner réel.
-- Import dynamique des classes via chemins "module:Class" passés en CLI (ou autodétection).
-- Mapping direct `scan_table` -> affichage (cartes, board, boutons, pot/fond, bankrolls).
-- Intégration `Game` optionnelle : si présente et possède `update_from_scan`,
-  on calcule win_chance/EV/recommandation via `game` (sinon laissé vide).
+- Boucle Tkinter non bloquante (`after`), Start/Stop/Snapshot.
+- Intervalle de rafraîchissement paramétrable.
+- On instancie directement Controller, sans import dynamique.
+- On affiche directement la chaîne renvoyée par Controller.main().
 
-Correctif majeur
-----------------
-Renommage de la méthode `_bind_keys()` (au lieu de `_bind`) pour éviter le conflit
-avec la méthode interne `tkinter.Misc._bind()` qui provoquait :
-`TypeError: App._bind() takes 1 positional argument but 5 were given`.
-
-Exemples
---------
-$ python ui_main.py \
-    --scanner objet.scan:ScanTable \
-    --game objet.game:Game
-
-$ python ui_main.py --scanner folder_tool.scan:ScanTable
-
-Notes
------
-- Les imports échoués n'empêchent pas le démarrage de l'UI.
-- Le scanner doit fournir un `scan_table` dict avec des clés du type :
-  player_card_1_number/symbol, player_card_2_*, board_card_1..5_*,
-  button_1..3, pot, fond, player_money_J1..J5.
-- `Game` est facultatif; s'il est absent, `win_chance/ev/reco` restent vides.
+Raccourcis clavier
+------------------
+- F5   : Start
+- F6   : Snapshot (un seul appel à main())
+- Échap: Stop
 """
 
 from __future__ import annotations
 import argparse
-import importlib
 import time
-from dataclasses import dataclass, field
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional
 
 import tkinter as tk
 from tkinter import ttk
 
-# ----------------------------------------------------------------------------
-# Utils
-# ----------------------------------------------------------------------------
+from objet.services.controller import Controller   # <--- IMPORTANT : import direct
 
-SUIT_SYMBOLS = {
-    "spades": "♠", "hearts": "♥", "diamonds": "♦", "clubs": "♣",
-    "pique": "♠", "coeur": "♥", "carreau": "♦", "trefle": "♣",
-}
-
-def fmt_card(card: Optional[Tuple[Optional[str], Optional[str]]]) -> str:
-    if not card:
-        return "?"
-    v, s = card
-    if not v or not s:
-        return "?"
-    return f"{v}{SUIT_SYMBOLS.get(str(s).lower(), '?')}"
-
-def safe_float_str(x: Optional[float]) -> str:
-    return "—" if x is None else f"{x:.2f}"
-
-def pct(x: Optional[float]) -> str:
-    return "—" if x is None else f"{x*100:.1f}%"
-
-def to_float_safe(txt: Optional[str]) -> Optional[float]:
-    if not txt:
-        return None
-    clean = str(txt).replace("€", "").replace(" ", "").replace(",", ".")
-    try:
-        return float(clean)
-    except Exception:
-        return None
-
-def getv(d: Dict[str, Any], key: str) -> Optional[str]:
-    try:
-        return d[key]["value"]
-    except Exception:
-        return None
-
-def load_class(dotted: str):
-    """
-    Charge une classe depuis un chemin 'package.mod:Class'.
-    Retourne None si l'import échoue.
-    """
-    if not dotted or ":" not in dotted:
-        return None
-    mod_name, cls_name = dotted.split(":", 1)
-    try:
-        mod = importlib.import_module(mod_name)
-        return getattr(mod, cls_name)
-    except Exception:
-        return None
-
-# ----------------------------------------------------------------------------
-# UI State
-# ----------------------------------------------------------------------------
-
-@dataclass
-class ButtonInfo:
-    name: Optional[str] = None
-    value: Optional[float] = None
-
-@dataclass
-class PlayerInfo:
-    seat: int
-    bankroll: Optional[float] = None
-
-@dataclass
-class UIState:
-    player_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(default_factory=lambda: [None, None])
-    board_cards: List[Optional[Tuple[Optional[str], Optional[str]]]] = field(default_factory=lambda: [None]*5)
-    pot: Optional[float] = None
-    fond: Optional[float] = None
-    players: List[PlayerInfo] = field(default_factory=list)
-    buttons: List[ButtonInfo] = field(default_factory=lambda: [ButtonInfo(), ButtonInfo(), ButtonInfo()])
-    win_chance: Optional[float] = None
-    ev: Optional[float] = None
-    recommended: Optional[ButtonInfo] = None
-    last_scan_ms: Optional[float] = None
-    fps: Optional[float] = None
-
-# ----------------------------------------------------------------------------
-# App
-# ----------------------------------------------------------------------------
 
 class App(tk.Tk):
-    def __init__(self, scanner_cls, game_cls=None, scan_interval_ms: int = 250):
+    def __init__(self, controller: Controller, scan_interval_ms: int = 250):
         super().__init__()
-        self.title("Live Table – UI Orchestrator")
+
+        self.title("Live Table – Controller UI")
         self.geometry("880x640")
         self.minsize(780, 520)
 
-        # Instances backend (facultatives/optionnelles)
-        self.scanner = scanner_cls() if scanner_cls else None
-        self.game = game_cls() if game_cls else None
+        # Backend
+        self.controller = controller
 
         # Orchestration
         self.scanning = False
         self.scan_interval_ms = scan_interval_ms
-        self._last_tick_t = None
+        self._last_tick_t: Optional[float] = None
 
-        # State
-        self.state = UIState()
+        # Perf
+        self.last_call_ms: Optional[float] = None
+        self.fps: Optional[float] = None
 
         # UI
         self._build()
         self._layout()
-        self._bind_keys()  # <— renommé pour éviter le conflit tkinter
-        self._render()
+        self._bind_keys()
 
-    # ---------- UI ----------
+        self._set_text("Prêt. Appuie sur F5 ou sur ▶ Start.")
+
+    # ---------- Construction UI ----------
 
     def _build(self):
+        # Barre supérieure
         self.frm_top = ttk.Frame(self)
         self.btn_start = ttk.Button(self.frm_top, text="▶ Start", command=self.start_scan)
         self.btn_stop = ttk.Button(self.frm_top, text="⏸ Stop", command=self.stop_scan)
@@ -209,16 +111,29 @@ class App(tk.Tk):
         self.ent_interval = ttk.Entry(self.frm_top, width=6, textvariable=self.var_interval)
         self.lbl_status = ttk.Label(self.frm_top, text="Ready.", width=30, anchor="w")
 
+        # Zone centrale texte + scroll
         self.frm_center = ttk.Frame(self)
-        self.txt = tk.Text(self.frm_center, height=26, wrap="none", font=("Consolas", 12), state="disabled")
-        self.scroll = ttk.Scrollbar(self.frm_center, orient="vertical", command=self.txt.yview)
+        self.txt = tk.Text(
+            self.frm_center,
+            height=26,
+            wrap="none",
+            font=("Consolas", 12),
+            state="disabled",
+        )
+        self.scroll = ttk.Scrollbar(
+            self.frm_center,
+            orient="vertical",
+            command=self.txt.yview
+        )
         self.txt.configure(yscrollcommand=self.scroll.set)
 
+        # Barre inférieure (perf)
         self.frm_bottom = ttk.Frame(self)
         self.var_perf = tk.StringVar(value="scan: — ms | fps: —")
         self.lbl_perf = ttk.Label(self.frm_bottom, textvariable=self.var_perf)
 
     def _layout(self):
+        # Top
         self.frm_top.pack(side="top", fill="x", padx=10, pady=8)
         self.btn_start.pack(side="left", padx=(0, 6))
         self.btn_stop.pack(side="left", padx=(0, 12))
@@ -227,65 +142,29 @@ class App(tk.Tk):
         self.ent_interval.pack(side="left", padx=(6, 18))
         self.lbl_status.pack(side="left", padx=6)
 
+        # Centre
         self.frm_center.pack(side="top", fill="both", expand=True, padx=10, pady=(0, 6))
         self.txt.pack(side="left", fill="both", expand=True)
         self.scroll.pack(side="right", fill="y")
 
+        # Bottom
         self.frm_bottom.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
         self.lbl_perf.pack(side="left")
 
     def _bind_keys(self):
-        # IMPORTANT : ne pas nommer cette méthode `_bind` pour éviter le conflit avec tkinter
+        # IMPORTANT : ne pas utiliser `_bind` (réservé par tkinter)
         self.bind("<Escape>", lambda e: self.stop_scan())
         self.bind("<F5>", lambda e: self.start_scan())
         self.bind("<F6>", lambda e: self.snapshot_once())
         self.ent_interval.bind("<Return>", lambda e: self._update_interval())
 
-    # ---------- Orchestration ----------
+    # ---------- Helpers UI ----------
 
-    def start_scan(self):
-        self._update_interval()
-        if not self.scanner:
-            self.lbl_status.configure(text="Scanner non importé (voir --scanner).")
-            return
-        if not self.scanning:
-            self.scanning = True
-            self.lbl_status.configure(text="Scanning…")
-            self._last_tick_t = time.time()
-            self.after(self.scan_interval_ms, self._tick)
-
-    def stop_scan(self):
-        self.scanning = False
-        self.lbl_status.configure(text="Stopped.")
-
-    def snapshot_once(self):
-        t0 = time.perf_counter()
-        self._poll_once()
-        dt_ms = (time.perf_counter() - t0) * 1000.0
-        self.state.last_scan_ms = dt_ms
-        self.state.fps = None
-        self._render()
-        self.var_perf.set(f"scan: {dt_ms:.1f} ms | fps: —")
-        self.lbl_status.configure(text="Snapshot done.")
-
-    def _tick(self):
-        if not self.scanning:
-            return
-        t0 = time.perf_counter()
-        self._poll_once()
-        dt_ms = (time.perf_counter() - t0) * 1000.0
-        self.state.last_scan_ms = dt_ms
-
-        now = time.time()
-        if self._last_tick_t:
-            dt_s = max(now - self._last_tick_t, 1e-6)
-            self.state.fps = 1.0 / dt_s
-        self._last_tick_t = now
-
-        self._render()
-        fps_txt = f"{self.state.fps:.1f}" if self.state.fps else "—"
-        self.var_perf.set(f"scan: {dt_ms:.1f} ms | fps: {fps_txt}")
-        self.after(self.scan_interval_ms, self._tick)
+    def _set_text(self, text: str):
+        self.txt.configure(state="normal")
+        self.txt.delete("1.0", "end")
+        self.txt.insert("1.0", text)
+        self.txt.configure(state="disabled")
 
     def _update_interval(self):
         try:
@@ -295,175 +174,103 @@ class App(tk.Tk):
             self.scan_interval_ms = 250
             self.var_interval.set(str(self.scan_interval_ms))
 
-    # ---------- Backend bridge ----------
+    # ---------- Orchestration ----------
 
-    def _poll_once(self):
+    def start_scan(self):
+        self._update_interval()
+        self.scanning = True
+        self.lbl_status.configure(text="Scanning…")
+        self._last_tick_t = time.time()
+        self.after(self.scan_interval_ms, self._tick)
+
+    def stop_scan(self):
+        self.scanning = False
+        self.lbl_status.configure(text="Stopped.")
+
+    def snapshot_once(self):
         """
-        Récupère un scan_table réel depuis le scanner,
-        met à jour l'UIState, et (si dispo) alimente Game pour win/EV/reco.
+        Un seul appel à Controller.main(), sans boucle continue.
         """
+        t0 = time.perf_counter()
         try:
-            out = self.scanner.scan()  # scanner réel attendu
-            scan_table = None
-            if isinstance(out, tuple) and len(out) == 2 and isinstance(out[1], dict):
-                scan_table = out[1]
-            elif isinstance(out, dict):
-                scan_table = out
-            elif hasattr(self.scanner, 'table'):
-                scan_table = getattr(self.scanner, 'table', None)
-            if not isinstance(scan_table, dict):
-                self.lbl_status.configure(text="Scan invalide (pas de dict).")
-                return
+            out = self.controller.main()
         except Exception as e:
-            self.lbl_status.configure(text=f"Scan error: {e}")
+            self.last_call_ms = None
+            self.fps = None
+            self._set_text(f"Erreur Controller.main(): {e}")
+            self.var_perf.set("scan: — ms | fps: —")
+            self.lbl_status.configure(text="Erreur controller.")
             return
 
-        # ------ Mapping direct scan_table -> UIState (cartes/board/boutons/montants) ------
-        pc1 = (getv(scan_table, "player_card_1_number"), getv(scan_table, "player_card_1_symbol"))
-        pc2 = (getv(scan_table, "player_card_2_number"), getv(scan_table, "player_card_2_symbol"))
-        board = [(getv(scan_table, f"board_card_{i}_number"), getv(scan_table, f"board_card_{i}_symbol")) for i in range(1, 6)]
-        buttons = []
-        for i in range(1, 4):
-            raw = getv(scan_table, f"button_{i}")
-            buttons.append(ButtonInfo(name=raw, value=None))
+        dt_ms = (time.perf_counter() - t0) * 1000.0
+        self.last_call_ms = dt_ms
+        self.fps = None
 
-        pot = to_float_safe(getv(scan_table, "pot"))
-        fond = to_float_safe(getv(scan_table, "fond"))
-        players = []
-        for i in range(1, 6):
-            txt = getv(scan_table, f"player_money_J{i}")
-            if txt is None and i > 2:
-                break
-            players.append(PlayerInfo(seat=i, bankroll=to_float_safe(txt)))
+        text = out if isinstance(out, str) else repr(out)
+        self._set_text(text)
 
-        # ------ Optionnel: passer par Game pour win/EV/reco ------
-        win_chance = None
-        ev = None
-        recommended = None
-        if self.game and hasattr(self.game, "update_from_scan"):
-            try:
-                self.game.update_from_scan(scan_table)
-                if hasattr(self.game, "decision"):
-                    reco = self.game.decision()
-                    if isinstance(reco, str):
-                        recommended = ButtonInfo(name=reco, value=None)
-                    elif isinstance(reco, dict):
-                        recommended = ButtonInfo(name=str(reco.get("name") or reco.get("button")), value=reco.get("value"))
-                win_chance = getattr(self.game, "win_chance", None)
-                ev = getattr(self.game, "ev", None)
-            except Exception as e:
-                self.lbl_status.configure(text=f"Game error: {e}")
+        self.var_perf.set(f"scan: {dt_ms:.1f} ms | fps: —")
+        self.lbl_status.configure(text="Snapshot done.")
 
-        # Maj UIState
-        self.state.player_cards = [pc1, pc2]
-        self.state.board_cards = board
-        self.state.buttons = buttons
-        self.state.pot = pot
-        self.state.fond = fond
-        self.state.players = players
-        self.state.win_chance = win_chance
-        self.state.ev = ev
-        self.state.recommended = recommended
+    def _tick(self):
+        """
+        Boucle périodique : appelle Controller.main() toutes les X ms.
+        """
+        if not self.scanning:
+            return
 
-    # ---------- Rendering ----------
+        t0 = time.perf_counter()
+        try:
+            out = self.controller.main()
+        except Exception as e:
+            self.last_call_ms = None
+            self.fps = None
+            self._set_text(f"Erreur Controller.main(): {e}")
+            self.var_perf.set("scan: — ms | fps: —")
+            self.lbl_status.configure(text="Erreur controller.")
+        else:
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            self.last_call_ms = dt_ms
 
-    def _render(self):
-        s = self._format_text(self.state)
-        self.txt.configure(state="normal")
-        self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", s)
-        self.txt.configure(state="disabled")
+            # FPS estimé sur la boucle
+            now = time.time()
+            if self._last_tick_t is not None:
+                dt_s = max(now - self._last_tick_t, 1e-6)
+                self.fps = 1.0 / dt_s
+            else:
+                self.fps = None
+            self._last_tick_t = now
 
-    @staticmethod
-    def _format_text(st: UIState) -> str:
-        pc_line = " ".join(fmt_card(c) for c in st.player_cards)
-        board_line = " ".join(fmt_card(c) for c in st.board_cards)
-        buttons_line = "  |  ".join([
-            f"B{i}:{(b.name if b.name else '—')}{(' '+safe_float_str(b.value)) if b.value is not None else ''}"
-            for i, b in enumerate(st.buttons, start=1)
-        ])
-        players_line = "  |  ".join([f"J{p.seat}:{'Absent' if p.bankroll is None else safe_float_str(p.bankroll)}" for p in st.players])
-        win_txt = pct(st.win_chance)
-        ev_txt = safe_float_str(st.ev)
-        reco_txt = "—"
-        if st.recommended and st.recommended.name:
-            reco_txt = f"{st.recommended.name}"
-            if st.recommended.value is not None:
-                reco_txt += f" {safe_float_str(st.recommended.value)}"
+            text = out if isinstance(out, str) else repr(out)
+            self._set_text(text)
 
-        perf = []
-        perf.append(f"scan: {safe_float_str(st.last_scan_ms)} ms" if st.last_scan_ms is not None else "scan: — ms")
-        perf.append(f"fps: {st.fps:.1f}" if st.fps is not None else "fps: —")
+            fps_txt = f"{self.fps:.1f}" if self.fps else "—"
+            self.var_perf.set(f"scan: {dt_ms:.1f} ms | fps: {fps_txt}")
+            self.lbl_status.configure(text="OK.")
 
-        lines = [
-            "=== TABLE LIVE ===",
-            "",
-            f"Cartes joueur : {pc_line}",
-            f"Board        : {board_line}",
-            "",
-            f"Pot : {safe_float_str(st.pot)}    |  Fond (tapis) : {safe_float_str(st.fond)}",
-            f"Joueurs      : {players_line if players_line else '—'}",
-            "",
-            f"Chances de gain : {win_txt}",
-            f"EV (attendue)   : {ev_txt}",
-            f"Recommandation  : {reco_txt}",
-            "",
-            f"Boutons        : {buttons_line}",
-            "",
-            "Astuce: F5 = Start, F6 = Snapshot, Échap = Stop",
-            "",
-            "—",
-        ]
-        return "\n".join(lines)
+        if self.scanning:
+            self.after(self.scan_interval_ms, self._tick)
 
-# ----------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # CLI
-# ----------------------------------------------------------------------------
-
-def autodetect_classes() -> Tuple[Optional[type], Optional[type]]:
-    """
-    Tente quelques chemins courants pour trouver ScanTable et Game.
-    Retourne (scanner_cls, game_cls), chacun pouvant être None.
-    """
-    candidates_scanner = [
-        "objet.scan:ScanTable",
-        "folder_tool.scan:ScanTable",
-        "scan:ScanTable",
-        "tool:ScanTable",
-    ]
-    candidates_game = [
-        "objet.game:Game",
-        "game:Game",
-        "objet.Game:Game",
-    ]
-    scanner_cls = None
-    game_cls = None
-    for dotted in candidates_scanner:
-        scanner_cls = load_class(dotted)
-        if scanner_cls:
-            break
-    for dotted in candidates_game:
-        game_cls = load_class(dotted)
-        if game_cls:
-            break
-    return scanner_cls, game_cls
-
+# ---------------------------------------------------------------------------
 
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(description="UI orchestrator (non-demo)")
-    ap.add_argument("--scanner", help="Chemin 'module:Class' du scanner (ex: objet.scan:ScanTable)", default=None)
-    ap.add_argument("--game", help="Chemin 'module:Class' du Game (ex: objet.game:Game)", default=None)
-    ap.add_argument("--interval", type=int, default=250, help="Intervalle de scan en ms (25..2000)")
+    ap = argparse.ArgumentParser(description="UI simple autour de Controller.main()")
+    ap.add_argument(
+        "--interval",
+        type=int,
+        default=250,
+        help="Intervalle entre deux appels à main() en ms (25..2000)",
+    )
     return ap.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    scanner_cls = load_class(args.scanner) if args.scanner else None
-    game_cls = load_class(args.game) if args.game else None
-    if not scanner_cls and not game_cls:
-        scanner_cls, game_cls = autodetect_classes()
-    app = App(scanner_cls=scanner_cls, game_cls=game_cls, scan_interval_ms=args.interval)
+    controller = Controller()
+    app = App(controller=controller, scan_interval_ms=args.interval)
     app.mainloop()
 
 
@@ -473,9 +280,7 @@ if __name__ == "__main__":
 ```
 ### objet/__init__.py
 ```python
-"""Paquetage structuré en entités, états et services."""
-
-from . import entities, services, state
+"""Paquetage structurǸ en entitǸs, Ǹtats et services."""
 
 __all__ = ["entities", "services", "state"]
 
@@ -484,7 +289,7 @@ __all__ = ["entities", "services", "state"]
 ```python
 """Entités de base manipulées par les services du projet."""
 from .bouton import Action, Bouton
-from .card import CardObservation, CardSlot, convert_card
+from .card import Card
 from .player import Player
 
 __all__ = [
@@ -632,14 +437,14 @@ class Bouton:
 ```
 ### objet/entities/card.py
 ```python
-"""Entités liées aux cartes et utilitaires de conversion."""
+"""Entité unique représentant une carte scannée et sa normalisation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
 from typing import Optional
 
-from pokereval.card import Card
+from pokereval.card import Card as PokerCard
 
 LOGGER = logging.getLogger(__name__)
 
@@ -656,90 +461,160 @@ SUIT_ALIASES = {
 
 
 @dataclass
-class CardObservation:
-    """Observation d'une carte issue d'un scan ou d'une capture."""
-
-    value: Optional[str]
-    suit: Optional[str]
+class Card:
+    """Observation d'une carte et conversion vers l'objet PokerCard."""
+    card_coordinates_value: Optional[tuple[int, int, int, int]] = None
+    card_coordinates_suit: Optional[tuple[int, int, int, int]] = None
+    value: Optional[str] = None
+    suit: Optional[str] = None
     value_score: Optional[float] = None
     suit_score: Optional[float] = None
-    source: str = "scan"
-
-    def formatted(self) -> Optional[str]:
-        if not self.value or not self.suit:
-            return None
-        suit = SUIT_ALIASES.get(self.suit, self.suit)
-        return f"{self.value}{suit}"
+    poker_card: Optional[PokerCard] = None
+    formatted: Optional[str] = None
 
 
-@dataclass
-class CardSlot:
-    """Carte normalisée stockée dans l'état courant."""
+    def scan(self) -> tuple[Optional[str], Optional[str]]:
+        """
+        Retourne la valeur brute scannée (value, suit).
 
-    observation: Optional[CardObservation] = None
-    card: Optional[Card] = None
+        Utile pour debugger le flux OCR avant conversion en PokerCard.
+        """
+        return self.value, self.suit
 
-    def apply(self, observation: CardObservation) -> None:
-        self.observation = observation
-        formatted = observation.formatted()
-        self.card = convert_card(formatted) if formatted else None
-
-
-def convert_card(string_carte: Optional[str]) -> Optional[Card]:
-    """Convertit une chaîne représentant une carte de poker en objet :class:`Card`."""
-
-    suit_dict = {"\u2666": 1, "\u2665": 2, "\u2660": 3, "\u2663": 4}
-    value_dict = {
-        "2": 2,
-        "3": 3,
-        "4": 4,
-        "5": 5,
-        "6": 6,
-        "7": 7,
-        "8": 8,
-        "9": 9,
-        "10": 10,
-        "J": 11,
-        "Q": 12,
-        "K": 13,
-        "A": 14,
-    }
-
-    if string_carte in (None, "", "_"):
-        return None
-
-    string_carte = string_carte.strip()
-    if not string_carte:
-        return None
-
-    if string_carte[0] == "0":
-        message = (
-            f"Debug : La carte spécifiée '{string_carte}' est modifiée en '10{string_carte[1:]}' pour correction."
+    def apply_observation(
+        self,
+        value: Optional[str],
+        suit: Optional[str],
+        value_score: Optional[float] = None,
+        suit_score: Optional[float] = None,
+    ) -> None:
+        """Applique une nouvelle observation et met à jour ."""
+        LOGGER.debug(
+            "apply_observation( value=%s, suit=%s, value_score=%s, suit_score=%s)",
+            value,
+            suit,
+            value_score,
+            suit_score,
         )
-        LOGGER.debug(message)
-        string_carte = "10" + string_carte[1:]
+        self.value = value
+        self.suit = suit
+        self.value_score = value_score
+        self.suit_score = suit_score
+        if self.value and self.suit: 
+            suit_sym = SUIT_ALIASES.get(self.suit, self.suit)
+            formatted = f"{self.value}{suit_sym}"
+            self.formatted = formatted
+            self.poker_card = self._convert_string_to_pokercard(formatted) 
+            
+    def reset(self) -> None:
+        """Réinitialise l'état de la carte."""
+        self.value = None
+        self.suit = None
+        self.value_score = None
+        self.suit_score = None
+        self.poker_card = None
+        self.formatted = None
 
-    if len(string_carte) >= 2:
-        value_part = string_carte[:-1]
-        suit_part = string_carte[-1]
-        if value_part in value_dict and suit_part in suit_dict:
-            value = value_dict[value_part]
-            suit = suit_dict[suit_part]
-        else:
+    @staticmethod
+    def _convert_string_to_pokercard(string_carte: Optional[str]) -> Optional[PokerCard]:
+        """
+        Convertit une chaîne '10♥' / 'A♠' en PokerCard (ou None si invalide).
+
+        Mapping suits pokereval:
+            1 -> spades (s)
+            2 -> hearts (h)
+            3 -> diamonds (d)
+            4 -> clubs (c)
+        """
+        suit_dict = {
+            "\u2660": 1,  # ♠
+            "\u2665": 2,  # ♥
+            "\u2666": 3,  # ♦
+            "\u2663": 4,  # ♣
+        }
+        value_dict = {
+            "2": 2,
+            "3": 3,
+            "4": 4,
+            "5": 5,
+            "6": 6,
+            "7": 7,
+            "8": 8,
+            "9": 9,
+            "10": 10,
+            "J": 11,
+            "Q": 12,
+            "K": 13,
+            "A": 14,
+        }
+
+        if string_carte in (None, "", "_"):
+            return None
+
+        string_carte = string_carte.strip()
+        if not string_carte:
+            return None
+
+        # correction éventuelle si le scanner a renvoyé '0' au lieu de '10' en première position
+        if string_carte[0] == "0" and len(string_carte) >= 2:
+            original = string_carte
+            corrected = "10" + string_carte[1:]
+            LOGGER.debug(
+                "Debug : La carte spécifiée '%s' est modifiée en '%s' pour correction.",
+                original,
+                corrected,
+            )
+            string_carte = corrected
+
+        if len(string_carte) >= 2:
+            value_part = string_carte[:-1]
+            suit_part = string_carte[-1]
+            value = value_dict.get(value_part)
+            suit = suit_dict.get(suit_part)
+            if value is not None and suit is not None:
+                return PokerCard(value, suit)
             LOGGER.debug("Debug : La carte spécifiée '%s' n'est pas reconnue.", string_carte)
             return None
-    else:
+
         LOGGER.debug("Debug : La carte spécifiée '%s' est trop courte.", string_carte)
         return None
 
-    return Card(value, suit)
+
+__all__ = ["Card"]
 
 
-__all__ = [
-    "CardObservation",
-    "CardSlot",
-    "convert_card",
-]
+if __name__ == "__main__":
+    import sys
+
+    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
+
+    print("=== Tests manuels de Card ===")
+
+    tests = [
+        ("A", "hearts"),
+        ("10", "spades"),
+        ("J", "diamonds"),
+        (None, "clubs"),   # valeur manquante
+        ("Q", None),       # couleur manquante
+    ]
+
+    for idx, (val, suit) in enumerate(tests, start=1):
+        c = Card()
+        c.apply_observation(value=val, suit=suit)
+        print(f"Test {idx} : value={val!r}, suit={suit!r}")
+        print(f"  formatted   = {c.formatted()!r}")
+        print(f"  poker_card  = {c.poker_card!r}")
+        print(f"  raw scan    = {c.scan()!r}")
+        print("-" * 40)
+
+    print("Vous pouvez également passer une carte en argument, ex :")
+    print("  python card.py 'A♥'")
+
+    if len(sys.argv) > 1:
+        raw = sys.argv[1]
+        print(f"\n=== Conversion directe depuis l'argument CLI : {raw!r} ===")
+        pc = Card._convert_string_to_pokercard(raw)
+        print("PokerCard =>", pc)
 
 ```
 ### objet/entities/player.py
@@ -772,232 +647,426 @@ __all__ = ["Player"]
 ### objet/scanner/__init__.py
 ```python
 # -*- coding: utf-8 -*-
-from .cards import CardsScanner, CardsScannerConfig
-from .buttons import ButtonsScanner
-from .players import PlayersScanner
+from .scan import ScanTable
 
 ```
-### objet/scanner/cards_scan.py
+### objet/scanner/cards_recognition.py
 ```python
-# scanner/cards.py
+"""Card template helpers shared between scanner code and CLI tools."""
 from __future__ import annotations
-from typing import Dict, Any, Optional, Tuple, Callable
-import json
+
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
-try:
-    # Utilitaires centralisés de calibration/extraction (si présents)
-    # (cf. README: scripts/_utils.py)
-    from scripts import _utils as util  # type: ignore
-except Exception:
-    util = None
+import cv2
+import numpy as np
+from PIL import Image
 
-try:
-    # Si tu as une fonction de reco prête dans tes scripts:
-    # ex. recognize_number_and_suit(number_img, suit_img) -> (value, suit, score_v, score_s)
-    from scripts.capture_cards import recognize_number_and_suit as _rec_cards  # type: ignore
-except Exception:
-    _rec_cards = None
+__all__ = [
+    "CardObservation",
+    "TemplateIndex",
+    "is_card_present",
+    "match_best",
+    "recognize_number_and_suit",
+]
 
-try:
-    # Alternative: si identify_card expose une API similaire
-    from scripts.identify_card import recognize_number_and_suit as _rec_cards_alt  # type: ignore
-except Exception:
-    _rec_cards_alt = None
 
-# ---------------------------------------------------------------------
-# Helpers “safe”
-# ---------------------------------------------------------------------
+@dataclass
+class CardObservation:
+    """Observation brute d'une carte (issue de la capture)."""
 
-def _load_coordinates() -> Dict[str, Any]:
+    value: Optional[str]
+    suit: Optional[str]
+    value_score: float
+    suit_score: float
+    source: str = "capture"
+
+
+class TemplateIndex:
+    """Charge les gabarits de chiffres/figures et de symboles depuis config/<game>/cards."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self.numbers: Dict[str, List[np.ndarray]] = {}
+        self.suits: Dict[str, List[np.ndarray]] = {}
+
+    @staticmethod
+    def _prep(gray: np.ndarray) -> np.ndarray:
+        return gray
+
+    @staticmethod
+    def _imread_gray(p: Path) -> Optional[np.ndarray]:
+        try:
+            img = Image.open(p).convert("L")
+            return np.array(img)
+        except Exception:
+            return None
+
+    def _load_dir(self, sub: str) -> Dict[str, List[np.ndarray]]:
+        base = self.root / sub
+        out: Dict[str, List[np.ndarray]] = {}
+        if not base.exists():
+            return out
+        for label_dir in sorted(base.iterdir()):
+            if not label_dir.is_dir():
+                continue
+            label = label_dir.name
+            imgs: List[np.ndarray] = []
+            for f in sorted(label_dir.glob("*.png")):
+                g = self._imread_gray(f)
+                if g is not None:
+                    imgs.append(self._prep(g))
+            if imgs:
+                out[label] = imgs
+        return out
+
+    def load(self) -> None:
+        self.numbers = self._load_dir("numbers")
+        self.suits = self._load_dir("suits")
+
+    def check_missing(
+        self,
+        expect_numbers: Optional[Iterable[str]] = None,
+        expect_suits: Optional[Iterable[str]] = None,
+    ) -> Dict[str, List[str]]:
+        miss: Dict[str, List[str]] = {"numbers": [], "suits": []}
+        if expect_numbers:
+            for v in expect_numbers:
+                if v not in self.numbers:
+                    miss["numbers"].append(v)
+        if expect_suits:
+            for s in expect_suits:
+                if s not in self.suits:
+                    miss["suits"].append(s)
+        return miss
+
+
+def _to_gray(img):
+    """Normalise un patch en niveau de gris (ndarray 2D).
+
+    Accepte :
+    - un numpy.ndarray (BGR ou déjà en gris),
+    - une image PIL,
+    - au pire, tout objet convertible en ndarray.
     """
-    Charge coordinates.json :
-    - Priorité au loader commun (scripts/_utils.py) s'il existe
-    - Sinon charge depuis config/coordinates.json
-    """
-    if util and hasattr(util, "load_coordinates"):
-        return util.load_coordinates()
-    # Fallback local
-    coord_paths = [
-        Path("config/coordinates.json"),
-        Path("coordinates.json"),  # selon ce que tu utilises actuellement
-    ]
-    for p in coord_paths:
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8"))
-    raise FileNotFoundError("coordinates.json introuvable")
+    # 1) Cas OpenCV / numpy
+    if isinstance(img, np.ndarray):
+        # Déjà en niveaux de gris
+        if img.ndim == 2:
+            return img
+        # Image couleur (en pratique BGR si ça vient de cv2 / screen_crop)
+        if img.ndim == 3:
+            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        raise ValueError(f"Format ndarray inattendu pour _to_gray: shape={img.shape}")
 
-def _crop_numpy(img_np, rel_box, table_abs):
-    """
-    Découpe un patch numpy à partir:
-    - img_np: full frame (numpy HxWxC ou PIL converti vers np)
-    - rel_box: [x1, y1, x2, y2] relatif à la table (0..1 ou coord relatives pixels table ?)
-    - table_abs: [X1, Y1, X2, Y2] bbox absolue de la table sur l'écran
-    """
-    import numpy as np
-    X1, Y1, X2, Y2 = table_abs
-    w = max(0, X2 - X1)
-    h = max(0, Y2 - Y1)
-    # Support coordonnées relatives 0..1
-    if all(0.0 <= v <= 1.0 for v in rel_box):
-        x1 = int(X1 + rel_box[0] * w)
-        y1 = int(Y1 + rel_box[1] * h)
-        x2 = int(X1 + rel_box[2] * w)
-        y2 = int(Y1 + rel_box[3] * h)
+    # 2) Cas PIL.Image
+    if isinstance(img, Image.Image):
+        arr = np.array(img.convert("RGB"))
+        return cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+
+    # 3) Fallback : on tente de convertir en ndarray
+    arr = np.array(img)
+    if arr.ndim == 2:
+        return arr
+    if arr.ndim == 3:
+        # On part du principe que c’est du BGR (cas le plus probable avec OpenCV)
+        return cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+
+    raise ValueError(f"Type d'image non supporté pour _to_gray: {type(img)}")
+
+
+def is_card_present(patch: np.ndarray | Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
+    """Heuristique simple : proportion de pixels *très clairs* sur la zone."""
+
+    if isinstance(patch, np.ndarray):
+        arr = patch
+        if arr.ndim == 2:
+            arr_u8 = arr.astype(np.uint8, copy=False)
+            white = arr_u8 >= threshold
+            ratio = float(white.mean())
+            return ratio >= float(min_ratio)
+        if arr.ndim == 3:
+            arr_u8 = arr.astype(np.uint8, copy=False)
+        else:
+            raise ValueError(f"Unsupported array shape for card presence: {arr.shape}")
+    elif isinstance(patch, Image.Image):
+        arr_u8 = np.array(patch.convert("RGB"), dtype=np.uint8)
     else:
-        # Sinon supposées relatives en pixels table
-        x1 = X1 + int(rel_box[0])
-        y1 = Y1 + int(rel_box[1])
-        x2 = X1 + int(rel_box[2])
-        y2 = Y1 + int(rel_box[3])
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = max(x1 + 1, x2), max(y1 + 1, y2)
-    return img_np[y1:y2, x1:x2, :]
+        raise TypeError(f"Unsupported patch type for card presence: {type(patch)!r}")
 
-def _to_pil(img_np):
-    from PIL import Image
-    return Image.fromarray(img_np)
+    if arr_u8.ndim == 2:
+        white = arr_u8 >= threshold
+    else:
+        white = np.all(arr_u8 >= threshold, axis=2)
 
-def _grab_frame_np() -> "np.ndarray":
-    from PIL import ImageGrab
-    import numpy as np
-    # full screen
-    pil = ImageGrab.grab()
-    return np.array(pil)
+    ratio = float(white.mean())
+    return ratio >= float(min_ratio)
 
-def _get_table_bbox(coords: Dict[str, Any]) -> Optional[Tuple[int, int, int, int]]:
+
+def match_best(gray_img: np.ndarray, templates: List[np.ndarray], method: int = cv2.TM_CCOEFF_NORMED) -> float:
+    best = -1.0
+    for tpl in templates:
+        if gray_img.shape[0] < tpl.shape[0] or gray_img.shape[1] < tpl.shape[1]:
+            continue
+        res = cv2.matchTemplate(gray_img, tpl, method)
+        _, score, _, _ = cv2.minMaxLoc(res)
+        best = max(best, float(score))
+    return best
+
+
+def recognize_number_and_suit(
+    number_patch: Image.Image,
+    suit_patch: Image.Image,
+    idx: TemplateIndex,
+) -> Tuple[Optional[str], Optional[str], float, float]:
+    """Retourne (value, suit, score_value, score_suit)."""
+
+    g_num = _to_gray(number_patch)
+    g_suit = _to_gray(suit_patch)
+
+    best_num, best_num_score = None, -1.0
+    for label, tpls in idx.numbers.items():
+        score = match_best(g_num, tpls)
+        if score > best_num_score:
+            best_num_score = score
+            best_num = label
+
+    best_suit, best_suit_score = None, -1.0
+    for label, tpls in idx.suits.items():
+        score = match_best(g_suit, tpls)
+        if score > best_suit_score:
+            best_suit_score = score
+            best_suit = label
+
+    return best_num, best_suit, best_num_score, best_suit_score
+
+```
+### objet/scanner/scan.py
+```python
+
+from typing import Optional, Tuple
+
+import cv2
+import numpy as np
+from PIL import ImageGrab, Image
+import logging
+
+from pathlib import Path
+import sys
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from objet.utils.calibration import load_coordinates
+from objet.utils.pyauto import locate_in_image
+from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
+
+DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
+DEFAULT_CARDS_ROOT = Path("config/PMU/Cards")
+
+
+class ScanTable:
+    """Scan de la table PMU basé sur capture écran + pyautogui.
+
+    - Localisation de la fenêtre via un template d'ancre (me.png) avec locate_in_image().
+    - Utilisation de (size, ref_offset) issus de coordinates.json pour reconstruire le crop.
+    - screen_array / screen_crop en BGR (convention OpenCV).
     """
-    Tente de récupérer la bbox absolue de la table.
-    Idéalement, tu as déjà KEY type 'table_capture' dans coordinates.json.
-    Sinon, branche ici ton “find_table()”.
-    """
-    tcap = coords.get("table_capture")
-    if not tcap:
+
+    def __init__(self) -> None:
+        # --- Config / calibration ---
+        self.coord_path = DEFAULT_COORD_PATH
+        _, _, table_capture = load_coordinates(self.coord_path)
+
+        size_list = table_capture.get("size")
+        ref_list = table_capture.get("ref_offset")
+
+        if not size_list or not ref_list:
+            raise ValueError(f"Invalid table_capture in {self.coord_path}: {table_capture}")
+
+        self.size_crop: Tuple[int, int] = (int(size_list[0]), int(size_list[1]))
+        self.offset_ref: Tuple[int, int] = (int(ref_list[0]), int(ref_list[1]))
+
+        # Gabarit de référence (ancre) utilisé par pyautogui/locate
+        self.reference_pil: Image.Image = Image.open("config/PMU/me.png").convert("RGB")
+
+        # --- État runtime ---
+        self.screen_array: Optional[np.ndarray] = None     # plein écran, BGR
+        self.screen_crop: Optional[np.ndarray] = None      # crop table, BGR
+        self.table_origin: Optional[Tuple[int, int]] = None
+        self.scan_string: str = "init"
+        self.cards_root = DEFAULT_CARDS_ROOT
+        self.template_index = TemplateIndex(self.cards_root)
+        # Première capture
+        self.screen_refresh()
+
+
+    
+    def test_scan(self) -> bool:
+        self.screen_refresh()
+        return self.find_table()
+    
+    def screen_refresh(self) -> None:
+        """Capture plein écran dans self.screen_array (numpy BGR)."""
+        grab = ImageGrab.grab()               # PIL RGB
+        rgb = np.array(grab)                  # numpy RGB
+        self.screen_array = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)  # numpy BGR
+
+    # ------------------------------------------------------------------
+    # Localisation de la table via pyautogui
+    # ------------------------------------------------------------------
+    def find_table(self, *, grayscale: bool = True, confidence: float = 0.9) -> bool:
+        """Localise la table via l'ancre + (size, ref_offset).
+
+        Remplit :
+          - self.screen_crop : crop couleur BGR de la table
+          - self.table_origin : (x0, y0) top-left sur l'écran
+          - self.scan_string : 'ok' ou "don't find".
+        """
+        if self.screen_array is None:
+            self.scan_string = "no_screen"
+            return False
+
+        # 1) Localiser l'ancre dans le plein écran via pyautogui
+        box = locate_in_image(
+            haystack=self.screen_array,
+            needle=self.reference_pil,
+            assume_bgr=True,
+            grayscale=grayscale,
+            confidence=confidence,
+        )
+
+        if box is None:
+            self.scan_string = "don't find"
+            self.screen_crop = None
+            self.table_origin = None
+            return False
+
+        anchor_left, anchor_top, anchor_w, anchor_h = box
+        W, H = self.size_crop
+        ox, oy = self.offset_ref
+
+        # 2) Calcul du coin haut-gauche de la fenêtre de table
+        x0 = int(anchor_left - ox)
+        y0 = int(anchor_top - oy)
+
+        # Clamp dans les bornes de l'écran
+        h_scr, w_scr = self.screen_array.shape[:2]
+        x0 = max(0, min(x0, w_scr - 1))
+        y0 = max(0, min(y0, h_scr - 1))
+        x1 = max(0, min(x0 + W, w_scr))
+        y1 = max(0, min(y0 + H, h_scr))
+
+        if x1 <= x0 or y1 <= y0:
+            self.scan_string = "invalid_crop"
+            self.screen_crop = None
+            self.table_origin = None
+            return False
+
+        # 3) Crop BGR pour le reste du pipeline
+        self.screen_crop = self.screen_array[y0:y1, x0:x1].copy()
+        self.table_origin = (x0, y0)
+        self.scan_string = "ok"
+        return True
+
+    # ------------------------------------------------------------------
+    # Scan des cartes dans la table (identique à ta version, basé sur screen_crop)
+    # ------------------------------------------------------------------
+    def scan_carte(self, position_value: Tuple[int, int, int, int],position_suit ) -> Tuple[Optional[str], Optional[str], float, float]:
+        """
+        Retourne:
+            (value, suit, confidence_value, confidence_suit)
+
+        - value, suit : str ou None
+        - confidence_* : float entre 0.0 et 1.0
+        """
+
+        h_img, w_img = self.screen_crop.shape[:2]
+
+
+            
+
+        # crops séparés pour la valeur et le symbole
+        image_card_value = self._crop_box_gray(position_value)
+        image_card_suit = self._crop_box_gray(position_suit)
+
+        
+        # rgb = cv2.cvtColor(image_card_value, cv2.COLOR_BGR2RGB)
+        # Image.fromarray(rgb).show()
+        
+        if is_card_present(image_card_value):
+            carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(image_card_value,image_card_suit,self.template_index) # manque un argument  sans dout pour la suit
+
+            # Si ta fonction de reco ne retourne pas de score, on considère confidence = 1.0
+            conf_val = 1.0 if carte_value is not None else 0.0
+            conf_suit = 1.0 if carte_suit is not None else 0.0
+            return carte_value, carte_suit, conf_val, conf_suit
+        return None, None, 0.0, 0.0
+
+
+ 
+    
+    # Stubs à compléter plus tard
+    def scan_pot(self, position):
+        _ = self.screen_crop
         return None
-    # Support absolu: [X1,Y1,X2,Y2]
-    if len(tcap) == 4 and max(tcap) > 1.0:
-        return tuple(int(v) for v in tcap)  # type: ignore
-    # Support relatif à l'écran (0..1)
-    from PIL import ImageGrab
-    w, h = ImageGrab.grab().size
-    X1 = int(tcap[0] * w); Y1 = int(tcap[1] * h); X2 = int(tcap[2] * w); Y2 = int(tcap[3] * h)
-    return (X1, Y1, X2, Y2)
 
-def _recognize(number_img_pil, symbol_img_pil) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Appelle ta reco existante si dispo (scripts/capture_cards.py ou scripts/identify_card.py),
-    sinon renvoie (None, None) proprement (pas de crash).
-    """
-    if _rec_cards:
-        try:
-            val, suit, *_scores = _rec_cards(number_img_pil, symbol_img_pil)  # type: ignore
-            return (val, suit)
-        except Exception:
-            pass
-    if _rec_cards_alt:
-        try:
-            val, suit, *_scores = _rec_cards_alt(number_img_pil, symbol_img_pil)  # type: ignore
-            return (val, suit)
-        except Exception:
-            pass
-    return (None, None)
+    def scan_player(self, position):
+        _ = self.screen_crop
+        return None, None
 
-# ---------------------------------------------------------------------
-# Scanner Cartes minimal (adapter en wrapper Table si tu veux)
-# ---------------------------------------------------------------------
+    def scan_money_player(self, position):
+        _ = self.screen_crop
+        return None
 
-CARD_KEYS = {
-    "player": [
-        ("player_card_1_number", "player_card_1_symbol"),
-        ("player_card_2_number", "player_card_2_symbol"),
-    ],
-    "board": [
-        ("board_card_1_number", "board_card_1_symbol"),
-        ("board_card_2_number", "board_card_2_symbol"),
-        ("board_card_3_number", "board_card_3_symbol"),
-        ("board_card_4_number", "board_card_4_symbol"),
-        ("board_card_5_number", "board_card_5_symbol"),
-    ],
-}
+    def scan_bouton(self, position):
+        _ = self.screen_crop
+        return None, None
 
-class TableScanner:
-    """
-    Scanner minimal qui ne gère QUE les cartes.
-    - capture écran
-    - crop table
-    - crop patches number/symbol via coordinates.json
-    - reco via scripts existants si dispos
-    Retourne un scan_table dict (clés standard) ; boutons/joueurs/pot/fond restent vides.
-    """
-    def __init__(self):
-        self.coords = _load_coordinates()
 
-    def scan(self) -> Dict[str, Dict[str, Any]]:
-        import numpy as np
-        scan_table: Dict[str, Dict[str, Any]] = {}
-        try:
-            frame = _grab_frame_np()  # (H,W,3)
-            table_bbox = _get_table_bbox(self.coords)
-            if table_bbox is None:
-                # pas de table -> on sort proprement
-                return scan_table
+    def _crop_box_gray(self,box, pad=3):
+        """Retourne un crop (numpy BGR) pour box=(x,y,w,h) avec padding et clamp."""
+        x, y, w, h = box
+        x0 = max(0, int(x - pad))
+        y0 = max(0, int(y - pad))
+        x1 = min(self.screen_crop.shape[1], int(x + w + pad))
+        y1 = min(self.screen_crop.shape[0], int(y + h + pad))
+        img = self.screen_crop[y0:y1, x0:x1].copy()
+        return img
 
-            # --- Player cards ---
-            for num_key, sym_key in CARD_KEYS["player"]:
-                rel_num = self.coords.get(num_key)
-                rel_sym = self.coords.get(sym_key)
-                val = suit = None
-                if rel_num and rel_sym:
-                    patch_n = _crop_numpy(frame, rel_num, table_bbox)
-                    patch_s = _crop_numpy(frame, rel_sym, table_bbox)
-                    if patch_n.size and patch_s.size:
-                        val, suit = _recognize(_to_pil(patch_n), _to_pil(patch_s))
-                scan_table[num_key] = {"value": val}
-                scan_table[sym_key] = {"value": suit}
+if __name__ == "__main__":
+    scan = ScanTable()
+    print(scan.test_scan())
+    
 
-            # --- Board cards ---
-            for num_key, sym_key in CARD_KEYS["board"]:
-                rel_num = self.coords.get(num_key)
-                rel_sym = self.coords.get(sym_key)
-                val = suit = None
-                if rel_num and rel_sym:
-                    patch_n = _crop_numpy(frame, rel_num, table_bbox)
-                    patch_s = _crop_numpy(frame, rel_sym, table_bbox)
-                    if patch_n.size and patch_s.size:
-                        val, suit = _recognize(_to_pil(patch_n), _to_pil(patch_s))
-                scan_table[num_key] = {"value": val}
-                scan_table[sym_key] = {"value": suit}
+    import cv2
+    import numpy as np
+    from PIL import Image
 
-            # --- Stubs neutres pour compat UI (optionnels) ---
-            for i in range(1, 4):
-                scan_table[f"button_{i}"] = {"value": None}
-            scan_table["pot"] = {"value": None}
-            scan_table["fond"] = {"value": None}
-            for i in range(1, 6):
-                scan_table[f"player_money_J{i}"] = {"value": None}
+    img = scan.screen_crop  # BGR
 
-            return scan_table
-        except Exception:
-            # jamais faire planter l’UI : renvoyer un dict vide
-            return {}
-
+    if isinstance(img, np.ndarray):
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        Image.fromarray(rgb).show()
+    elif isinstance(img, Image.Image):
+        img.show()
+    else:
+        print("Type d'image inattendu:", type(img))
+        
 ```
 ### objet/services/__init__.py
 ```python
 """Services d'orchestration et composants applicatifs."""
 from .cliqueur import Cliqueur
 from .controller import Controller
-from .game import Game
-from .party import Party
-from .scan import ScanTable
+# from .game import Game
+# from .party import Party
 from .table import Table
 
 __all__ = [
     "Cliqueur",
     "Controller",
-    "Game",
-    "Party",
-    "ScanTable",
     "Table",
 ]
 
@@ -1078,41 +1147,51 @@ class Cliqueur:
 ```
 ### objet/services/controller.py
 ```python
+# launch_controller.py à la racine du projet
+
 import cv2
 import numpy as np
 import PIL
 from PIL import ImageGrab, Image
-from objet.services.cliqueur import Cliqueur
-from objet.services.game import Game
-from objet.services.scan import ScanTable
+# from objet.services.cliqueur import Cliqueur
+from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class Controller():
     def __init__(self):
         self.count = 0
         self.running = False
-        
+        self.cpt = 0
         self.game_stat = {}
+        #
+        from objet.services.game import Game
         self.game = Game()
-        self.scan = ScanTable()
-        self.click = Cliqueur()
+        # self.click = Cliqueur()
+        
     def main(self):
-        if self.scan.scan():
+        
              # machine à état de la partie et save 
             # Todo
-            # self.game.scan_to_data_table(self.scan.table)
+        
             
-            self.game.update_from_scan(self.scan.table)
-            button = self.game.decision()
-            if button:
-                self.click.click_button(self.scan.table[button]['coord_abs'])
+            
+        if self.game.scan_to_data_table():
+        
+            self.game.update_from_scan()
+            
+
         
         
         
         
             return self.game_stat_to_string()
-        
-        return "don t find"
+        self.cpt += 1
+        return "don t find"+f"     Scan n°{self.cpt}"
         
 
     
@@ -1124,12 +1203,12 @@ class Controller():
             str: Une chaîne de caractères contenant les informations formatées.
         """
         # Récupération des informations de base
-        metrics = self.game.metrics
-        nbr_player = metrics.players_count
-        pot = metrics.pot
-        fond = metrics.fond
-        chance_win_0 = metrics.chance_win_0
-        chance_win_x = metrics.chance_win_x
+        # metrics = self.game.metrics
+        # nbr_player = metrics.players_count
+        # pot = metrics.pot
+        # fond = metrics.fond
+        # chance_win_0 = metrics.chance_win_0
+        # chance_win_x = metrics.chance_win_x
 
         # Fonction pour arrondir à 4 chiffres significatifs
         def round_sig(x, sig=4):
@@ -1139,59 +1218,99 @@ class Controller():
                 return x
 
         # Arrondi des valeurs numériques
-        pot = round_sig(pot)
-        fond = round_sig(fond)
-        chance_win_0 = round_sig(chance_win_0)
-        chance_win_x = round_sig(chance_win_x)
+        # pot = round_sig(pot)
+        # fond = round_sig(fond)
+        # chance_win_0 = round_sig(chance_win_0)
+        # chance_win_x = round_sig(chance_win_x)
 
         # Informations sur les cartes du joueur
-        me_cards = [str(card) for card in self.game.cards.player_cards()]
+        me_cards = [card.formatted for card in self.game.cards.me_cards()]
         me_cards_str = ', '.join(me_cards)
 
         # Informations sur le board
-        board_cards = [str(card) for card in self.game.cards.board_cards()]
+        board_cards = [card.formatted for card in self.game.cards.board_cards()]
         board_cards_str = ', '.join(board_cards)
 
         # Informations sur les boutons
-        buttons_info = []
-        # Ajout d'une ligne d'en-tête avec des largeurs de colonnes fixes
-        buttons_info.append(f"{'Bouton':<10} {'Action':<15} {'Valeur':<10} {'Gain':<10}")
-        buttons_info.append('-' * 50)  # Ligne de séparation
+        # buttons_info = []
+        # # Ajout d'une ligne d'en-tête avec des largeurs de colonnes fixes
+        # buttons_info.append(f"{'Bouton':<10} {'Action':<15} {'Valeur':<10} {'Gain':<10}")
+        # buttons_info.append('-' * 50)  # Ligne de séparation
 
-        for i in range(1, 4):
-            button = self.game.table.buttons.buttons.get(f'button_{i}')
-            if button:
-                name = button.name if button.name is not None else ''
-                value = round_sig(button.value) if button.value is not None else ''
-                gain = round_sig(button.gain) if button.gain is not None else ''
-                buttons_info.append(f"{f'Button {i}':<10} {name:<15} {str(value):<10} {str(gain):<10}")
-            else:
-                buttons_info.append(f"{f'Button {i}':<10} {'':<15} {'':<10} {'':<10}")
+        # for i in range(1, 4):
+        #     button = self.game.table.buttons.buttons.get(f'button_{i}')
+        #     if button:
+        #         name = button.name if button.name is not None else ''
+        #         value = round_sig(button.value) if button.value is not None else ''
+        #         gain = round_sig(button.gain) if button.gain is not None else ''
+        #         buttons_info.append(f"{f'Button {i}':<10} {name:<15} {str(value):<10} {str(gain):<10}")
+        #     else:
+        #         buttons_info.append(f"{f'Button {i}':<10} {'':<15} {'':<10} {'':<10}")
 
-        buttons_str = '\n'.join(buttons_info)
+        # buttons_str = '\n'.join(buttons_info)
 
         # Informations sur l'argent des joueurs
-        player_money = metrics.player_money
-        player_money_info = []
-        for player, money in player_money.items():
-            money_str = str(round_sig(money)) if money is not None else 'Absent'
-            player_money_info.append(f"{player}: {money_str}")
+        # player_money = metrics.player_money
+        # player_money_info = []
+        # for player, money in player_money.items():
+        #     money_str = str(round_sig(money)) if money is not None else 'Absent'
+        #     player_money_info.append(f"{player}: {money_str}")
 
-        player_money_str = '\n'.join(player_money_info)
+        # player_money_str = '\n'.join(player_money_info)
 
         return (
-            f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
-            f"Mes cartes: {me_cards_str}\n"
-            f"Cartes sur le board: {board_cards_str}\n"
-            f"Chance de gagner (1 joueur): {chance_win_0}\n"
-            f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
-            f"Informations sur les boutons:\n{buttons_str}\n\n"
-            f"Argent des joueurs:\n{player_money_str}"
-        )
+        #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
+             f"Mes cartes: {me_cards_str}\n"
+             f"Cartes sur le board: {board_cards_str}\n"
+        #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
+        #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
+        #     f"Informations sur les boutons:\n{buttons_str}\n\n"
+        #     f"Argent des joueurs:\n{player_money_str}"
+         )
 
-    def draw(self):
-        if self.scan.scan():
-            self.scan.show_debug_image()
+        return "Statistiques du jeu désactivées pour les tests de scan."
+
+
+
+if __name__ == "__main__":
+    controller = Controller()
+    result = controller.main()
+    print(result)
+    
+  # Sécurisation : on vérifie que table/scan/screen_array existent
+    scan = getattr(controller.game.table, "scan", None)
+    img = getattr(scan, "screen_array", None) if scan is not None else None
+  
+
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    img = controller.game.table.scan.screen_array  # BGR
+
+    if isinstance(img, np.ndarray):
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        Image.fromarray(rgb).show()
+    elif isinstance(img, Image.Image):
+        img.show()
+    else:
+        print("Type d'image inattendu:", type(img))
+
+
+    
+
+
+    img = controller.game.table.scan.screen_crop  # BGR
+    if img is None:
+        print("Aucun crop de table disponible.")
+    else:
+        if isinstance(img, np.ndarray):
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            Image.fromarray(rgb).show()
+        elif isinstance(img, Image.Image):
+            img.show()
+        else:
+            print("Type d'image inattendu:", type(img))
 
 
 ```
@@ -1206,12 +1325,19 @@ from typing import Any, Dict, Mapping, Optional
 
 from pokereval.hand_evaluator import HandEvaluator
 
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import tool
-from objet.entities.card import CardObservation, convert_card
+from objet.entities.card import Card
 from objet.services.table import Table
+from objet.scanner.cards_recognition import CardObservation
 from objet.state import ButtonsState, CardsState, CaptureState, MetricsState
 
-from scripts.state_requirements import SCRIPT_STATE_USAGE, StatePortion
+from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1220,93 +1346,28 @@ LOGGER = logging.getLogger(__name__)
 class Game:
     """Stocke l'état courant de la table et calcule les décisions."""
 
-    workflow: Optional[str] = None
-    raw_scan: Dict[str, Any] = field(default_factory=dict)
+    
     table: Table = field(default_factory=Table)
     metrics: MetricsState = field(default_factory=MetricsState)
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
 
-    @property
-    def cards(self) -> CardsState:
-        """Accès direct aux cartes pour compatibilité historique."""
+   
+    def scan_to_data_table(self) -> bool:
+       
+        if not self.table.launch_scan():
+            return False
+       
+       
+        return True
+    
 
-        return self.table.cards
+    def update_from_scan(self) -> None:
+        pass
+   
+   
+   
 
-    @property
-    def buttons(self) -> ButtonsState:
-        """Expose l'état des boutons (compatibilité historique)."""
 
-        return self.table.buttons
-
-    @property
-    def captures(self) -> CaptureState:
-        """Accès direct aux informations de capture."""
-
-        return self.table.captures
-
-    # ---- Fabrication -------------------------------------------------
-    @classmethod
-    def for_script(cls, script_name: str) -> "Game":
-        game = cls(workflow=script_name)
-        usage = SCRIPT_STATE_USAGE.get(script_name)
-        if usage and StatePortion.CAPTURES in usage.portions:
-            game.table.captures.workflow = script_name
-        return game
-
-    @classmethod
-    def from_scan(cls, scan_table: Mapping[str, Any]) -> "Game":
-        game = cls()
-        game.update_from_scan(scan_table)
-        return game
-
-    @classmethod
-    def from_capture(
-        cls,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-        card_observations: Optional[Mapping[str, CardObservation]] = None,
-        workflow: Optional[str] = None,
-    ) -> "Game":
-        game = cls(workflow=workflow)
-        game.update_from_capture(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-            card_observations=card_observations,
-        )
-        return game
-
-    # ---- Mutateurs ---------------------------------------------------
-    def update_from_scan(self, scan_table: Mapping[str, Any]) -> None:
-        self.raw_scan = dict(scan_table)
-        self.table.apply_scan(scan_table)
-        self.metrics.update_from_scan(scan_table)
-
-    def update_from_capture(
-        self,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-        card_observations: Optional[Mapping[str, CardObservation]] = None,
-    ) -> None:
-        self.table.update_coordinates(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-        )
-        if card_observations:
-            for base_key, observation in card_observations.items():
-                self.table.add_card_observation(base_key, observation)
-
-    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
-        self.table.add_card_observation(base_key, observation)
 
     # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
@@ -1384,171 +1445,226 @@ __all__ = [
 ]
 
 ```
-### objet/services/scan.py
+### objet/services/script_state.py
 ```python
-import matplotlib.pyplot as plt
+"""Descriptions des portions d'état consommées par les différents scripts."""
+from __future__ import annotations
 
-import cv2
-import numpy as np
-import PIL
-import logging
-from typing import Dict, Tuple
-from PIL import ImageGrab, Image, ImageDraw, ImageFont
-import pyautogui
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, FrozenSet
 
-
- 
-from folder_tool import timer
-from Type_game import Type_game
-from pokereval.card import Card
-
-import tool
-TIMER_SCAN_REFRESH = 0.5  # secondes
-# Import des fonctions utilitaires depuis le dossier scripts
-try:
-    from scripts.crop_core import find_ref_point,crop_from_size_and_offset
-except ImportError:
-    # Fallback au cas où le script ne serait pas dans le path
-    find_ref_point = None
-
-class ScanTable():
-    def __init__(self):
-        
-        
-
-        self.screen_array = np.array(ImageGrab.grab())
-        self.screen_reference = cv2.imread('screen/launch/me.png', 0) #paht dans PMU par défaut mais  en passer paramètre
-        self.screen_crop = None
-        
-        
-        
-        self.timer_screen = timer.Timer(TIMER_SCAN_REFRESH)
-        self.table_origin = None                # (x0, y0, x1, y1) absolu sur le screen global
-        self.scan_string = "don t find"
-)
-
-    def test_scan(self,debug=False):
-        if self.screen_refresh():
-            if  self.find_table():
-                 return True
-
-        self.scan_string = "don't find"
-        return False
-    
-
-        
-    def screen_refresh(self):
-        if self.timer_screen.is_expire():
-            self.timer_screen.refresh()
-            self.screen_array = np.array(ImageGrab.grab())
-            return True
-        return False
-    
-    def find_table(self):
-        """Trouve la table en utilisant la fonction de template matching du module crop_core."""
-        
-        self.reference_point = find_ref_point(self.screen_old, Image.fromarray(self.screen_reference))
-            return False
-        self.screen_crop,self.table_origin=  crop_from_size_and_offset
-        return True
-    """Dans le fichier scan.py, je suis en train de modifier la classe scan_table et la fonction find_tables. On voit un référence point qui est devenu inutile. 
-    Je veux un bouleen.
-    notamment crop_core.py, contiennent exactement ce qu'il faut pour réaliser cela de manière propre et robuste. La fonction crop_from_size_and_offset 
-    
-
-C'est plutôt que, en fait, sur un screen complet, ça croppe une image et j'ai le point de référence sur le screen complet et sur l'image cropped. Mais moi, je veux le point en haut à gauche, donc le point (0, 0) de l'image cropped en coordonnées de l'image globale du screen global.
-
-Est-ce que tu peux me proposer une méthode propre pour le faire en utilisant ce qui est déjà existant dans les fonctions script, dans le dossier script?"""
-    
-      
+__all__ = [
+    "StatePortion",
+    "ScriptStateUsage",
+    "SCRIPT_STATE_USAGE",
+    "describe_scripts",
+]
 
 
+class StatePortion(str, Enum):
+    """Portions logiques de l'état de jeu consommées par les scripts."""
+
+    CARDS = "cards"
+    BUTTONS = "buttons"
+    METRICS = "metrics"
+    CAPTURES = "captures"
 
 
+@dataclass(frozen=True)
+class ScriptStateUsage:
+    """Description des portions d'état nécessaires à un script."""
+
+    name: str
+    portions: FrozenSet[StatePortion]
+    description: str
+
+
+SCRIPT_STATE_USAGE: Dict[str, ScriptStateUsage] = {
+    "capture_cards.py": ScriptStateUsage(
+        name="capture_cards.py",
+        portions=frozenset({StatePortion.CARDS, StatePortion.CAPTURES}),
+        description="Extraction et reconnaissance des cartes depuis une capture.",
+    ),
+    "Crop_Video_Frames.py": ScriptStateUsage(
+        name="Crop_Video_Frames.py",
+        portions=frozenset({StatePortion.CAPTURES}),
+        description="Découpe périodique des captures vidéo à partir des paramètres de table.",
+    ),
+    "crop_core.py": ScriptStateUsage(
+        name="crop_core.py",
+        portions=frozenset({StatePortion.CAPTURES}),
+        description="Fonctions communes de capture/crop et outils de validation géométrique.",
+    ),
+    "position_zones.py": ScriptStateUsage(
+        name="position_zones.py",
+        portions=frozenset(
+            {
+                StatePortion.CAPTURES,
+                StatePortion.CARDS,
+                StatePortion.BUTTONS,
+                StatePortion.METRICS,
+            }
+        ),
+        description="Éditeur Tk classique des zones OCR (cartes, boutons, métriques).",
+    ),
+    "position_zones_ctk.py": ScriptStateUsage(
+        name="position_zones_ctk.py",
+        portions=frozenset(
+            {
+                StatePortion.CAPTURES,
+                StatePortion.CARDS,
+                StatePortion.BUTTONS,
+                StatePortion.METRICS,
+            }
+        ),
+        description="Éditeur CustomTkinter des zones OCR (cartes, boutons, métriques).",
+    ),
+    "zone_project.py": ScriptStateUsage(
+        name="zone_project.py",
+        portions=frozenset(
+            {
+                StatePortion.CAPTURES,
+                StatePortion.CARDS,
+                StatePortion.BUTTONS,
+                StatePortion.METRICS,
+            }
+        ),
+        description="Modèle et opérations associées aux projets de zones OCR.",
+    ),
+    "copy_python_sources.py": ScriptStateUsage(
+        name="copy_python_sources.py",
+        portions=frozenset(),
+        description="Outil utilitaire sans dépendance sur l'état de jeu.",
+    ),
+}
+
+
+def describe_scripts() -> Dict[str, Dict[str, str]]:
+    """Retourne un dictionnaire sérialisable listant les usages déclarés."""
+
+    return {
+        name: {
+            "portions": sorted(usage.portions),
+            "description": usage.description,
+        }
+        for name, usage in SCRIPT_STATE_USAGE.items()
+    }
 
 ```
 ### objet/services/table.py
 ```python
 """Service d'orchestration autour de l'état de la table de jeu."""
-from __future__ import annotations
+
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional
+from pathlib import Path
+from typing import Optional
+import sys
 
-from objet.entities.card import CardObservation
-from objet.state import ButtonsState, CardsState, CaptureState, extract_scan_value
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from objet.state import ButtonsState, CaptureState, CardsState
+from objet.scanner.scan import ScanTable
+from objet.utils.calibration import Region, load_coordinates , bbox_from_region
+DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
+
+@dataclass
+class Fond:
+    coordinates_value: Optional[tuple[int, int, int, int]] = None
+    amount: float = 0.0
+    
+    def reset(self) -> None:
+        self.amount = 0.0
+    
+
+@dataclass
+class Player:
+    coordinates_value: Optional[tuple[int, int, int, int]] = None
+    active_start : bool = True
+    continue_round : bool = True
+    fond = Fond(coordinates_value=coordinates_value)
+    
+    def reset(self) -> None:
+        self.amount = 0.0
+    
 
 @dataclass
 class Table:
-    """Réunit cartes, boutons et informations de capture."""
-
+    """Réunit Les éléments à scanner et service de scan."""
+    
+    coord_path: Path | str = DEFAULT_COORD_PATH
     cards: CardsState = field(default_factory=CardsState)
-    buttons: ButtonsState = field(default_factory=ButtonsState)
-    captures: CaptureState = field(default_factory=CaptureState)
-    players: list[Any] = field(default_factory=list)
-
-    def apply_scan(self, scan_table: Mapping[str, Any]) -> None:
-        for i in range(1, 6):
-            number_key = f"board_card_{i}_number"
-            symbol_key = f"board_card_{i}_symbol"
-            observation = CardObservation(
-                value=extract_scan_value(scan_table, number_key),
-                suit=extract_scan_value(scan_table, symbol_key),
-                source="scan",
+    # buttons: ButtonsState = field(default_factory=ButtonsState)
+    # captures: CaptureState = field(default_factory=CaptureState)
+    scan = ScanTable()
+    pot = Fond()
+    new_party_flag: bool = False
+    
+    
+    def __post_init__(self) -> None:
+        regions, templates_resolved, _ = load_coordinates(self.coord_path)
+        self.pot.coordinates_value = bbox_from_region(regions.get("pot"))
+        
+        
+    def launch_scan(self) -> bool:
+       
+        if not self.scan.test_scan():
+            return False
+        
+        # --- Main héros (2 cartes) ---
+        for idx, card in enumerate(self.cards.me, start=1):
+            value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
+                position_value=card.card_coordinates_value,
+                position_suit=card.card_coordinates_suit
             )
-            self.cards.apply_observation(f"board_card_{i}", observation)
-        for i in range(1, 3):
-            number_key = f"player_card_{i}_number"
-            symbol_key = f"player_card_{i}_symbol"
-            observation = CardObservation(
-                value=extract_scan_value(scan_table, number_key),
-                suit=extract_scan_value(scan_table, symbol_key),
-                source="scan",
+            if value is not None or suit is not None:
+                if value != card.value and suit != card.suit:
+                    self.New_Party()
+            card.apply_observation(
+                value=value,
+                suit=suit,
+                value_score=confidence_value,
+                suit_score=confidence_suit,
             )
-            self.cards.apply_observation(f"player_card_{i}", observation)
-        self.buttons.update_from_scan(scan_table)
+        
+        for idx, card in enumerate(self.cards.board, start=1):
+            if card.formatted is None:
+                value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
+                    position_value=card.card_coordinates_value,
+                    position_suit=card.card_coordinates_suit,
+                )
+                if value is None and suit is None:
+                    continue
+                card.apply_observation(
+                    value=value,
+                    suit=suit,
+                    value_score=confidence_value,
+                    suit_score=confidence_suit,
+                )
 
-    def update_coordinates(
-        self,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-    ) -> None:
-        self.captures.update_from_coordinates(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-        )
+                
+        # self.scan.scan_pot()
 
-    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
-        self.captures.record_observation(base_key, observation)
-        self.cards.apply_observation(base_key, observation)
 
-    def card_coordinates(self) -> Dict[str, Any]:
-        """Retourne les coordonnées connues pour les cartes."""
+        return True
 
-        card_regions = {
-            key: value
-            for key, value in self.captures.regions.items()
-            if key.startswith("board_card_") or key.startswith("player_card_")
-        }
-        return {
-            "table_capture": dict(self.captures.table_capture),
-            "regions": card_regions,
-            "reference_path": self.captures.reference_path,
-            "templates": {
-                key: value
-                for key, value in self.captures.templates.items()
-                if key.startswith("board_card_") or key.startswith("player_card_")
-            },
-        }
-
-   
-
+    def New_Party(self)-> None:
+        """Réinitialise l'état de la Table. et fait remonter un événement."""
+        self.cards.reset()
+        self.new_party_flag = True
+        
+    
+        
+if __name__ == "__main__":
+    # Petit stub de test local
+    table = Table()
+    table.launch_scan()
+    print("Cartes joueur:", table.cards.me_cards())
+    
 
 __all__ = ["Table"]
 
@@ -1620,7 +1736,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
-from objet.entities.card import CardObservation
+from objet.entities.card import Card
 
 
 @dataclass
@@ -1631,7 +1747,7 @@ class CaptureState:
     regions: "OrderedDict[str, Any]" = field(default_factory=OrderedDict)
     templates: Dict[str, Any] = field(default_factory=dict)
     reference_path: Optional[str] = None
-    card_observations: Dict[str, CardObservation] = field(default_factory=dict)
+    card_observations: Dict[str, Card] = field(default_factory=dict)
     workflow: Optional[str] = None
 
     def update_from_coordinates(
@@ -1651,7 +1767,7 @@ class CaptureState:
         if reference_path is not None:
             self.reference_path = reference_path
 
-    def record_observation(self, base_key: str, observation: CardObservation) -> None:
+    def record_observation(self, base_key: str, observation: Card) -> None:
         self.card_observations[base_key] = observation
 
     @property
@@ -1674,69 +1790,92 @@ __all__ = ["CaptureState"]
 ```
 ### objet/state/cards.py
 ```python
-"""Gestion de l'état des cartes de la table."""
-from __future__ import annotations
+# objet/state/cards.py
+"""Gestion de l'état des cartes de la table.
+
+- 5 cartes de board
+- 2 cartes pour le héros
+- Coordonnées injectées à la déclaration à partir de coordinates.json.
+"""
+
+from pathlib import Path
+import sys
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from pokereval.card import Card
+from objet.entities.card import Card
+from objet.utils.calibration import Region, load_coordinates , bbox_from_region
 
-from objet.entities.card import CardObservation, CardSlot
+CardBox = Tuple[int, int, int, int]
+
+# Même défaut que dans _utils.load_coordinates
+DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
+
+
 
 
 @dataclass
 class CardsState:
-    """Regroupe les cartes du board et du joueur."""
+    """
+    Regroupe les cartes du board et du joueur, avec coordonnées injectées.
 
-    board: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(5)])
-    player: List[CardSlot] = field(default_factory=lambda: [CardSlot() for _ in range(2)])
-    observations: Dict[str, CardObservation] = field(default_factory=dict)
+    - `coord_path` permet de surcharger le fichier de coordonnées si besoin
+      (par défaut : config/PMU/coordinates.json).
+    - Si `board` / `me` ne sont pas fournis, ils sont construits automatiquement
+      à partir de `load_coordinates(coord_path)`.
+    """
 
-    def apply_observation(self, base_key: str, observation: CardObservation) -> None:
-        self.observations[base_key] = observation
-        slot = self._slot_for_base_key(base_key)
-        if slot:
-            slot.apply(observation)
+    coord_path: Path | str = DEFAULT_COORD_PATH
+    board: List[Card] = field(default_factory=list)
+    me: List[Card] = field(default_factory=list)
 
-    def _slot_for_base_key(self, base_key: str) -> Optional[CardSlot]:
-        if base_key.startswith("player_card_"):
-            try:
-                idx = int(base_key.split("_")[-1]) - 1
-            except (ValueError, IndexError):
-                return None
-            if 0 <= idx < len(self.player):
-                return self.player[idx]
-        if base_key.startswith("board_card_"):
-            try:
-                idx = int(base_key.split("_")[-1]) - 1
-            except (ValueError, IndexError):
-                return None
-            if 0 <= idx < len(self.board):
-                return self.board[idx]
-        return None
+    def __post_init__(self) -> None:
+        # Cas où on injecte manuellement des cartes : on ne touche à rien.
+        if self.board and self.me:
+            return
 
-    def player_cards(self) -> List[Card]:
-        return [slot.card for slot in self.player if slot.card is not None]
+        regions, templates_resolved, _ = load_coordinates(self.coord_path)
+
+
+        if not self.board:
+            self.board = [
+                Card(card_coordinates_value=bbox_from_region(regions.get(f"board_card_{i}_number")),
+                      card_coordinates_suit=bbox_from_region(regions.get(f"board_card_{i}_symbol")),)
+                for i in range(1, 6)
+            ]
+
+        if not self.me:
+            self.me = [
+                Card(card_coordinates_value=bbox_from_region(regions.get(f"player_card_{i}_number")),
+                      card_coordinates_suit=bbox_from_region(regions.get(f"player_card_{i}_symbol")),)
+                for i in range(1, 3)
+            ]
+
+    # --- API pratique pour le reste du code ----------------------------------
+
+    def me_cards(self) -> List[Card]:
+        """Retourne les entités Card du joueur (avec value/suit/poker_card)."""
+        return self.me
 
     def board_cards(self) -> List[Card]:
-        return [slot.card for slot in self.board if slot.card is not None]
+        """Retourne les entités Card du board."""
+        return self.board
 
-    def as_strings(self) -> Dict[str, List[str]]:
-        def _format(slots: Iterable[CardSlot]) -> List[str]:
-            out: List[str] = []
-            for slot in slots:
-                if slot.observation is None:
-                    out.append("?")
-                else:
-                    out.append(slot.observation.formatted() or "?")
-            return out
 
-        return {
-            "player": _format(self.player),
-            "board": _format(self.board),
-        }
-
+        
+    def reset(self) -> None:
+        """Réinitialise l'état de toutes les cartes."""
+        for card in self.me + self.board:
+            card.reset()
+            
+if __name__ == "__main__":
+    # Petit stub de test local
+    cards_state = CardsState()
+    print(cards_state.me[0])
 
 __all__ = ["CardsState"]
 
@@ -1798,14 +1937,22 @@ def extract_scan_value(scan_table: Mapping[str, Any], key: str) -> Optional[str]
 __all__ = ["extract_scan_value"]
 
 ```
-### scripts/_utils.py
+### objet/utils/__init__.py
 ```python
-"""Common helpers for calibration scripts.
+"""Utility modules shared across the application and scripts."""
+
+__all__ = ["calibration", "pyauto"]
+
+```
+### objet/utils/calibration.py
+```python
+"""Shared calibration helpers for screen capture tools.
 
 This module centralises the JSON loading/parsing logic shared by the
 calibration utilities as well as a couple of small image helpers.  The
-functions are intentionally dependency-light so they can be imported from
-Tk/CLI tools alike.
+functions remain dependency-light so they can be used from both
+application code and standalone scripts without creating circular
+imports.
 """
 from __future__ import annotations
 
@@ -1824,7 +1971,7 @@ __all__ = [
     "resolve_templates",
     "load_coordinates",
     "extract_patch",
-    "extract_region_images",
+    "collect_card_patches",
 ]
 
 
@@ -1953,26 +2100,52 @@ def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping
     )
 
 
-def load_coordinates(path: Path | str) -> Tuple[Dict[str, Region], Dict[str, Dict[str, Any]], Dict[str, Any]]:
-    """Load a coordinates.json file.
+# --- cache coordinates.json en mémoire ---------------------------------------
 
-    Returns ``(regions, templates_resolved, table_capture)`` where ``regions``
-    maps keys to :class:`Region` instances.
+# Chemin par défaut : racine/config/PMU/coordinates.json
+DEFAULT_COORDINATES_PATH = Path("config/PMU/coordinates.json")
+
+_CoordinatesCacheEntry = Tuple[Dict[str, "Region"], Dict[str, Dict[str, Any]], Dict[str, Any]]
+_COORDINATES_CACHE: Dict[Path, _CoordinatesCacheEntry] = {}
+
+
+def load_coordinates(
+    path: Path | str = DEFAULT_COORDINATES_PATH,
+) -> Tuple[Dict[str, "Region"], Dict[str, Dict[str, Any]], Dict[str, Any]]:
     """
+    Load a coordinates.json file.
 
+    Retourne ``(regions, templates_resolved, table_capture)`` où ``regions``
+    mappe les clés vers des :class:`Region`.
+
+    - *path* est optionnel, par défaut `config/PMU/coordinates.json`.
+    - Les résultats sont mis en cache par chemin absolu pour éviter
+      de rouvrir et reparser le JSON à chaque appel.
+    """
     coord_path = Path(path)
+    key = coord_path.resolve()
+
+    # 1) cache mémoire
+    cached = _COORDINATES_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    # 2) chargement disque
     with coord_path.open("r", encoding="utf-8") as fh:
         payload: Dict[str, Any] = json.load(fh)
 
     templates = payload.get("templates", {})
     resolved = resolve_templates(templates)
     raw_regions = payload.get("regions", {})
-    regions = {
-        key: _normalise_region_entry(key, raw, resolved)
-        for key, raw in raw_regions.items()
+    regions: Dict[str, Region] = {
+        r_key: _normalise_region_entry(r_key, raw, resolved)
+        for r_key, raw in raw_regions.items()
     }
     table_capture = payload.get("table_capture", {})
-    return regions, resolved, table_capture
+
+    result: _CoordinatesCacheEntry = (regions, resolved, table_capture)
+    _COORDINATES_CACHE[key] = result
+    return result
 
 
 def extract_patch(image: Image.Image, top_left: Tuple[int, int], size: Tuple[int, int], pad: int = 4) -> Image.Image:
@@ -1987,7 +2160,28 @@ def extract_patch(image: Image.Image, top_left: Tuple[int, int], size: Tuple[int
     return image.crop((x1, y1, x2, y2))
 
 
-def extract_region_images(
+def _region_group(region: Region | Mapping[str, Any]) -> str:
+    return region.group if isinstance(region, Region) else str(region.get("group", ""))
+
+
+def _region_geometry(region: Region | Mapping[str, Any]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    if isinstance(region, Region):
+        return region.top_left, region.size
+    top_left = region.get("top_left", [0, 0])
+    size = region.get("size", [0, 0])
+    tl_x = coerce_int(top_left[0])
+    tl_y = coerce_int(top_left[1])
+    width, height = 0, 0
+    if isinstance(size, Iterable):
+        values = list(size)
+        if values:
+            width = coerce_int(values[0])
+        if len(values) >= 2:
+            height = coerce_int(values[1])
+    return (tl_x, tl_y), (width, height)
+
+
+def collect_card_patches(
     table_img: Image.Image,
     regions: Mapping[str, Region | Mapping[str, Any]],
     *,
@@ -1995,40 +2189,31 @@ def extract_region_images(
     groups_numbers: Tuple[str, ...] = ("player_card_number", "board_card_number"),
     groups_suits: Tuple[str, ...] = ("player_card_symbol", "board_card_symbol"),
 ) -> Dict[str, Tuple[Image.Image, Image.Image]]:
-    """Return ``{base_key: (number_patch, suit_patch)}`` for cards regions."""
+    """Return ``{base_key: (number_patch, suit_patch)}`` for recognised card regions.
 
-    def group_of(region: Region | Mapping[str, Any]) -> str:
-        return region.group if isinstance(region, Region) else str(region.get("group", ""))
+    The implementation walks through *regions* a single time and relies on
+    :func:`extract_patch` to perform the actual cropping, keeping the
+    bookkeeping logic light-weight while still supporting both
+    :class:`Region` objects and plain ``dict`` entries.
+    """
 
-    def top_left_of(region: Region | Mapping[str, Any]) -> Tuple[int, int]:
-        if isinstance(region, Region):
-            return region.top_left
-        top_left = region.get("top_left", [0, 0])
-        return coerce_int(top_left[0]), coerce_int(top_left[1])
-
-    def size_of(region: Region | Mapping[str, Any]) -> Tuple[int, int]:
-        if isinstance(region, Region):
-            return region.size
-        size = region.get("size")
-        if isinstance(size, Iterable):
-            values = list(size)
-            if len(values) >= 2:
-                return coerce_int(values[0]), coerce_int(values[1])
-        return 0, 0
-
-    pairs: Dict[str, Dict[str, Image.Image]] = {}
+    slots: Dict[str, Dict[str, Image.Image]] = {}
 
     for key, region in regions.items():
-        if group_of(region) in groups_numbers:
-            patch = extract_patch(table_img, top_left_of(region), size_of(region), pad)
-            base = key.replace("_number", "")
-            pairs.setdefault(base, {})["number"] = patch
+        group = _region_group(region)
+        slot: Optional[str] = None
+        base_key: Optional[str] = None
+        if group in groups_numbers:
+            slot = "number"
+            base_key = key.replace("_number", "")
+        elif group in groups_suits:
+            slot = "symbol"
+            base_key = key.replace("_symbol", "")
+        else:
+            continue
 
-    for key, region in regions.items():
-        if group_of(region) in groups_suits:
-            patch = extract_patch(table_img, top_left_of(region), size_of(region), pad)
-            base = key.replace("_symbol", "")
-            pairs.setdefault(base, {})["symbol"] = patch
+        if not slot or not base_key:
+            continue
 
     out: Dict[str, Tuple[Image.Image, Image.Image]] = {}
     for base, mapping in pairs.items():
@@ -2036,148 +2221,182 @@ def extract_region_images(
             out[base] = (mapping["number"], mapping["symbol"])
     return out
 
+
+
+
+BBox = Tuple[int, int, int, int]  # (x, y, w, h)
+
+def bbox_from_region(region: Optional["Region"]) -> Optional[BBox]:
+ 
+    x, y = region.top_left  
+    size = region.size
+
+    w, h = size
+    return x, y, w, h
+
+```
+### objet/utils/pyauto.py
+```python
+"""Helpers built around :mod:`pyautogui` usable from app code and scripts."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional, Tuple, Union
+
+import cv2
+import numpy as np
+import pyautogui
+from PIL import Image
+
+HaystackType = Union[np.ndarray, Image.Image]
+NeedleType = Union[str, Path, Image.Image]
+
+__all__ = ["locate_in_image"]
+
+
+def _to_pil_rgb(img: HaystackType, assume_bgr: bool = False) -> Image.Image:
+    """Convert ``img`` into a :class:`PIL.Image.Image` in RGB mode."""
+
+    if isinstance(img, Image.Image):
+        return img.convert("RGB")
+
+    if not isinstance(img, np.ndarray):
+        raise TypeError(f"Unsupported image type: {type(img)}")
+
+    arr = img
+    if arr.ndim == 2:
+        # grayscale -> RGB
+        return Image.fromarray(arr).convert("RGB")
+
+    if arr.ndim == 3 and arr.shape[2] == 3:
+        if assume_bgr:
+            arr_rgb = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
+        else:
+            arr_rgb = arr
+        return Image.fromarray(arr_rgb)
+
+    raise ValueError(f"Unsupported array shape: {arr.shape}")
+
+
+def locate_in_image(
+    haystack: HaystackType,
+    needle: NeedleType,
+    *,
+    assume_bgr: bool = False,
+    grayscale: bool = False,
+    confidence: float = 0.9,
+) -> Optional[Tuple[int, int, int, int]]:
+    """Locate ``needle`` inside ``haystack`` using ``pyautogui.locate``."""
+
+    haystack_pil = _to_pil_rgb(haystack, assume_bgr=assume_bgr)
+
+    if isinstance(needle, (str, Path)):
+        needle_pil = Image.open(needle).convert("RGB")
+    elif isinstance(needle, Image.Image):
+        needle_pil = needle.convert("RGB")
+    else:
+        raise TypeError(f"Unsupported needle type: {type(needle)}")
+
+    box = pyautogui.locate(
+        needle_pil,
+        haystack_pil,
+        grayscale=grayscale,
+        confidence=confidence,
+    )
+    if box is None:
+        return None
+
+    return int(box.left), int(box.top), int(box.width), int(box.height)
+
+```
+### scripts/_utils.py
+```python
+"""Compatibility layer for calibration helpers used by legacy scripts."""
+from __future__ import annotations
+
+from objet.utils.calibration import (
+    Region,
+    clamp_bbox,
+    clamp_top_left,
+    coerce_int,
+    extract_patch,
+    collect_card_patches,
+    load_coordinates,
+    resolve_templates,
+)
+
+__all__ = [
+    "Region",
+    "coerce_int",
+    "clamp_bbox",
+    "clamp_top_left",
+    "resolve_templates",
+    "load_coordinates",
+    "extract_patch",
+    "collect_card_patches",
+]
+
 ```
 ### scripts/capture_cards.py
 ```python
-# ==============================
-# cards_core.py — extraction + matching
-# ==============================
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Cartes — extraction, matching, contrôleur de table et outils vidéo/labeling.
+
+Regroupe les anciennes fonctionnalités de:
+- cards_core.py
+- cards_validate.py
+- controller.py
+- capture_source.py
+- labeler_cli.py
+- run_video_validate.py
+"""
+
 from __future__ import annotations
+
+import argparse
+import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING
 
 import cv2
 import numpy as np
 from PIL import Image
 
-# Accès modules du dépôt
-import sys
+# Accès modules du dépôt (pour exécution directe depuis scripts/)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+SCRIPTS_ROOT = Path(__file__).resolve().parent
+for root in (PROJECT_ROOT, SCRIPTS_ROOT):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
-from objet.entities.card import CardObservation
-from objet.services.game import Game
-from _utils import extract_region_images, load_coordinates
+from _utils import collect_card_patches, load_coordinates
+from crop_core import crop_from_size_and_offset
+from objet.scanner.cards_recognition import (
+    CardObservation,
+    TemplateIndex,
+    is_card_present,
+    recognize_number_and_suit,
+)
 
-# --- Modèle ---
-
-def is_card_present(patch: Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
-    """Heuristique simple: proportion de pixels *très clairs* sur toute la zone.
-    - threshold: niveau (0–255) à partir duquel un pixel est considéré "blanc"
-    - min_ratio: ratio minimal (ex: 8%)
-    """
-    arr = np.array(patch.convert("RGB"), dtype=np.uint8)
-    white = np.all(arr >= threshold, axis=2)
-    ratio = float(white.mean())
-    return ratio >= float(min_ratio)
-
-
-# --- Templates ---
-
-class TemplateIndex:
-    """Charge les gabarits de chiffres/figures et de symboles depuis config/<game>/cards.
-    Dossier attendu:
-      cards/numbers/<VALUE>/*.png
-      cards/suits/<SUIT>/*.png
-    """
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
-        self.numbers: Dict[str, List[np.ndarray]] = {}
-        self.suits: Dict[str, List[np.ndarray]] = {}
-
-    @staticmethod
-    def _prep(gray: np.ndarray) -> np.ndarray:
-        # optionnel: normalisation légère
-        return gray
-
-    @staticmethod
-    def _imread_gray(p: Path) -> Optional[np.ndarray]:
-        try:
-            img = Image.open(p).convert("L")
-            return np.array(img)
-        except Exception:
-            return None
-
-    def _load_dir(self, sub: str) -> Dict[str, List[np.ndarray]]:
-        base = self.root / sub
-        out: Dict[str, List[np.ndarray]] = {}
-        if not base.exists():
-            return out
-        for label_dir in sorted(base.iterdir()):
-            if not label_dir.is_dir():
-                continue
-            label = label_dir.name
-            imgs: List[np.ndarray] = []
-            for f in sorted(label_dir.glob("*.png")):
-                g = self._imread_gray(f)
-                if g is not None:
-                    imgs.append(self._prep(g))
-            if imgs:
-                out[label] = imgs
-        return out
-
-    def load(self) -> None:
-        self.numbers = self._load_dir("numbers")
-        self.suits = self._load_dir("suits")
-
-    def check_missing(self, expect_numbers: Optional[List[str]] = None, expect_suits: Optional[List[str]] = None) -> Dict[str, List[str]]:
-        miss: Dict[str, List[str]] = {"numbers": [], "suits": []}
-        if expect_numbers:
-            for v in expect_numbers:
-                if v not in self.numbers:
-                    miss["numbers"].append(v)
-        if expect_suits:
-            for s in expect_suits:
-                if s not in self.suits:
-                    miss["suits"].append(s)
-        return miss
-
-
-# --- Matching ---
-
-def _to_gray(img: Image.Image) -> np.ndarray:
-    return cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
-
-
-def match_best(gray_img: np.ndarray, templates: List[np.ndarray], method: int = cv2.TM_CCOEFF_NORMED) -> float:
-    best = -1.0
-    for tpl in templates:
-        if gray_img.shape[0] < tpl.shape[0] or gray_img.shape[1] < tpl.shape[1]:
-            # si le template est plus grand que l'extrait, on saute (ou on pourrait resize)
-            continue
-        res = cv2.matchTemplate(gray_img, tpl, method)
-        _, score, _, _ = cv2.minMaxLoc(res)
-        best = max(best, float(score))
-    return best
-
-
-def recognize_number_and_suit(number_patch: Image.Image, suit_patch: Image.Image, idx: TemplateIndex) -> Tuple[Optional[str], Optional[str], float, float]:
-    g_num = _to_gray(number_patch)
-    g_suit = _to_gray(suit_patch)
-    best_num, best_num_score = None, -1.0
-    for label, tpls in idx.numbers.items():
-        score = match_best(g_num, tpls)
-        if score > best_num_score:
-            best_num_score = score
-            best_num = label
-    best_suit, best_suit_score = None, -1.0
-    for label, tpls in idx.suits.items():
-        score = match_best(g_suit, tpls)
-        if score > best_suit_score:
-            best_suit_score = score
-            best_suit = label
-    return best_num, best_suit, best_num_score, best_suit_score
+if TYPE_CHECKING:  # hints uniquement
+    from objet.services.game import Game
 
 
 # ==============================
-# cards_validate.py — CLI de vérification basique
+# Modèle / observations de cartes
 # ==============================
-import argparse
 
-# from crop_core import crop_from_size_and_offset  # optionnel si on part du plein écran
-# Ici on supposera qu'on travaille sur test_crop_result.* directement (table déjà croppée)
+# Les classes et fonctions de reconnaissance sont fournies par
+# ``objet.scanner.cards_recognition`` pour éviter les imports circulaires.
+
+
+
+# ==============================
+# cards_validate — CLI de vérification basique sur une image
+# ==============================
 
 
 def _find_first(game_dir: Path, base: str, exts=(".png", ".jpg", ".jpeg")) -> Optional[Path]:
@@ -2203,7 +2422,12 @@ def _save_png(p: Path, img: Image.Image) -> None:
     img.save(p)
 
 
-def main(argv: Optional[list] = None) -> int:
+def main_cards_validate(argv: Optional[list] = None) -> int:
+    """Vérifie l'extraction + matching des cartes pour un jeu donné.
+
+    Utilise un screenshot déjà croppé (test_crop_result.* dans config/<game>/).
+    """
+
     parser = argparse.ArgumentParser(description="Vérifie l'extraction + matching des cartes pour un jeu")
     parser.add_argument("--game", default="PMU")
     parser.add_argument("--game-dir")
@@ -2214,9 +2438,9 @@ def main(argv: Optional[list] = None) -> int:
     args = parser.parse_args(argv)
 
     auto = _auto_paths_for_game(args.game, args.game_dir)
-    table_path = auto["table"]
-    coords_path = auto["coords"]
-    cards_root = auto["cards_root"]
+    table_path: Optional[Path] = auto["table"]
+    coords_path: Path = auto["coords"]
+    cards_root: Path = auto["cards_root"]
 
     if not table_path or not table_path.exists():
         raise SystemExit("ERROR: test_crop_result not found")
@@ -2229,8 +2453,8 @@ def main(argv: Optional[list] = None) -> int:
     idx = TemplateIndex(cards_root)
     idx.load()
     missing = idx.check_missing(
-        expect_numbers=["A","K","Q","J","10","9","8","7","6","5","4","3","2"],
-        expect_suits=["hearts","diamonds","clubs","spades"],
+        expect_numbers=["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"],
+        expect_suits=["hearts", "diamonds", "clubs", "spades"],
     )
     if missing["numbers"] or missing["suits"]:
         print("Missing templates:")
@@ -2242,6 +2466,10 @@ def main(argv: Optional[list] = None) -> int:
 
     # 2) Charger table et coordonnées
     table_img = Image.open(table_path).convert("RGBA")
+
+    # Import local pour limiter les risques d'import circulaire
+    from objet.services.game import Game  # type: ignore[import]
+
     game = Game.for_script(Path(__file__).name)
     regions, resolved, table_capture = load_coordinates(coords_path)
     game.update_from_capture(
@@ -2252,7 +2480,7 @@ def main(argv: Optional[list] = None) -> int:
     )
 
     # 3) Extraire patches cartes
-    pairs = extract_region_images(table_img, regions, pad=int(args.pad))
+    pairs = collect_card_patches(table_img, regions, pad=int(args.pad))
     if not pairs:
         print("No card regions found (check coordinates.json groups)")
         return 2
@@ -2266,12 +2494,13 @@ def main(argv: Optional[list] = None) -> int:
             print(f"{base_key}: probably empty (skip)")
             continue
         val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, idx)
-        game.add_card_observation(
-            base_key,
-            CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture"),
-        )
-        hit_val = (val is not None and s_val >= float(args.num_th))
-        hit_suit = (suit is not None and s_suit >= float(args.suit_th))
+
+        obs = CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture")
+        if hasattr(game, "add_card_observation"):
+            game.add_card_observation(base_key, obs)
+
+        hit_val = val is not None and s_val >= float(args.num_th)
+        hit_suit = suit is not None and s_suit >= float(args.suit_th)
         status = "OK" if (hit_val and hit_suit) else "LOW"
         print(f"{base_key}: {status}  value={val} ({s_val:.3f})  suit={suit} ({s_suit:.3f})")
         if args.dump:
@@ -2280,40 +2509,21 @@ def main(argv: Optional[list] = None) -> int:
         if not (hit_val and hit_suit):
             ok = False
 
-    if game.cards.as_strings():
+    # Résumé éventuel si Game expose des cartes formatées
+    if hasattr(game, "cards") and hasattr(game.cards, "as_strings"):
         summary = game.cards.as_strings()
-        print("Résumé Game → joueur:", ", ".join(summary["player"]))
-        print("Résumé Game → board:", ", ".join(summary["board"]))
+        player = summary.get("player") or []
+        board = summary.get("board") or []
+        print("Résumé Game → joueur:", ", ".join(player))
+        print("Résumé Game → board:", ", ".join(board))
 
     return 0 if ok else 1
 
 
-if __name__ == "__main__":
-    import sys
-    raise SystemExit(main(sys.argv[1:]))
+# ==============================
+# État de table / contrôleur runtime
+# ==============================
 
-
-# ==========================================
-# controller.py — Orchestrateur runtime (capture → crop → extract → match → état)
-# ==========================================
-# from __future__ import annotations
-from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, Iterable
-from pathlib import Path
-
-import json
-from PIL import Image
-
-# dépendances internes
-# from crop_core import crop_from_size_and_offset, find_ref_point
-# from cards_core import load_coordinates, TemplateIndex, extract_region_images, is_card_present, recognize_number_and_suit
-
-@dataclass
-class CardObs:
-    value: Optional[str]
-    suit: Optional[str]
-    value_score: float
-    suit_score: float
 
 @dataclass
 class CardState:
@@ -2321,17 +2531,38 @@ class CardState:
     suit: Optional[str] = None
     value_score: float = 0.0
     suit_score: float = 0.0
-    stable: int = 0      # nb frames consécutifs où l'observation est identique et au-dessus des seuils
+    stable: int = 0  # nb frames consécutifs où l'observation est identique et au-dessus des seuils
     last_seen: int = -1
+
 
 class TableState:
     def __init__(self) -> None:
         self.cards: Dict[str, CardState] = {}  # base_key -> state
 
-    def update(self, base_key: str, obs: CardObs, frame_idx: int, *, num_th: float, suit_th: float, require_k: int = 2) -> bool:
-        """Met à jour l'état d'une carte; retourne True si *nouvelle* valeur stabilisée (changement)."""
+    def update(
+        self,
+        base_key: str,
+        obs: CardObservation,
+        frame_idx: int,
+        *,
+        num_th: float,
+        suit_th: float,
+        require_k: int = 2,
+    ) -> bool:
+        """Met à jour l'état d'une carte.
+
+        Retourne True si une nouvelle valeur stabilisée (changement) est atteinte.
+        """
+
+        confident = (
+            obs.value is not None
+            and obs.value_score >= num_th
+            and obs.suit is not None
+            and obs.suit_score >= suit_th
+        )
+
         st = self.cards.get(base_key, CardState())
-        confident = (obs.value is not None and obs.value_score >= num_th) and (obs.suit is not None and obs.suit_score >= suit_th)
+
         if confident:
             same = (st.value == obs.value) and (st.suit == obs.suit)
             st.stable = (st.stable + 1) if same else 1
@@ -2343,18 +2574,37 @@ class TableState:
             st.stable = 0
             st.last_seen = frame_idx
             changed = False
+
         self.cards[base_key] = st
         return changed
 
     def snapshot(self) -> Dict[str, Dict[str, object]]:
-        return {k: {"value": v.value, "suit": v.suit, "value_score": v.value_score, "suit_score": v.suit_score, "stable": v.stable} for k, v in self.cards.items()}
+        return {
+            k: {
+                "value": v.value,
+                "suit": v.suit,
+                "value_score": v.value_score,
+                "suit_score": v.suit_score,
+                "stable": v.stable,
+            }
+            for k, v in self.cards.items()
+        }
+
 
 class TableController:
-    def __init__(self, game_dir: Path, game_state: Optional[Game] = None) -> None:
+    """Orchestrateur runtime (capture → crop → extract → match → état)."""
+
+    def __init__(self, game_dir: Path, game_state: Optional["Game"] = None) -> None:
+        # Import local pour éviter les imports circulaires si objet.services.game
+        # importe à son tour des scripts.
+        from objet.services.game import Game  # type: ignore[import]
+
         self.game_dir = Path(game_dir)
         self.coords_path = self.game_dir / "coordinates.json"
         self.ref_path = self._first_of("me", (".png", ".jpg", ".jpeg"))
-        self.game = game_state or Game.for_script(Path(__file__).name)
+
+        self.game: Game = game_state or Game.for_script(Path(__file__).name)
+
         self.regions, self.templates, table_capture = load_coordinates(self.coords_path)
         self.game.update_from_capture(
             table_capture=table_capture,
@@ -2362,54 +2612,73 @@ class TableController:
             templates=self.templates,
             reference_path=str(self.ref_path) if self.ref_path else None,
         )
+
         self.size, self.ref_offset = self._load_capture_params()
+
         # runtime caches
-        self.ref_img = Image.open(self.ref_path).convert("RGBA") if self.ref_path else None
+        self.ref_img: Optional[Image.Image] = (
+            Image.open(self.ref_path).convert("RGBA") if self.ref_path else None
+        )
         self.idx = TemplateIndex(self.game_dir / "cards")
         self.idx.load()
         self.state = TableState()
 
-    def _first_of(self, stem: str, exts) -> Optional[Path]:
+    def _first_of(self, stem: str, exts: Iterable[str]) -> Optional[Path]:
         for ext in exts:
             p = self.game_dir / f"{stem}{ext}"
             if p.exists():
                 return p
         return None
 
-    def _load_capture_params(self) -> Tuple[Tuple[int,int], Tuple[int,int]]:
+    def _load_capture_params(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         tc = self.game.table.captures.table_capture
         size = tc.get("size", [0, 0]) if isinstance(tc, dict) else [0, 0]
         ref_offset = tc.get("ref_offset", [0, 0]) if isinstance(tc, dict) else [0, 0]
         return (int(size[0]), int(size[1])), (int(ref_offset[0]), int(ref_offset[1]))
 
-    def process_frame(self, frame_rgba: Image.Image, frame_idx: int, *, num_th: float = 0.6, suit_th: float = 0.6, require_k: int = 2) -> Dict[str, Dict[str, object]]:
-        """Retourne un snapshot d'état après traitement du frame."""
+    def process_frame(
+        self,
+        frame_rgba: Image.Image,
+        frame_idx: int,
+        *,
+        num_th: float = 0.6,
+        suit_th: float = 0.6,
+        require_k: int = 2,
+    ) -> Dict[str, Dict[str, object]]:
+        """Traite un frame et retourne un snapshot d'état de table."""
+
         # 1) crop table via size + ref_offset
-        crop, _ = crop_from_size_and_offset(frame_rgba, self.size, self.ref_offset, reference_img=self.ref_img)
+        crop, _ = crop_from_size_and_offset(
+            frame_rgba, self.size, self.ref_offset, reference_img=self.ref_img
+        )
+
         # 2) extractions number/symbol
-        pairs = extract_region_images(crop, self.regions, pad=4)
+        pairs = collect_card_patches(crop, self.regions, pad=4)
+
         # 3) matching + mise à jour d'état
         for base_key, (patch_num, patch_suit) in pairs.items():
             if not is_card_present(patch_num):
                 continue
             val, suit, s_val, s_suit = recognize_number_and_suit(patch_num, patch_suit, self.idx)
-            obs = CardObs(val, suit, s_val, s_suit)
-            self.state.update(base_key, obs, frame_idx, num_th=num_th, suit_th=suit_th, require_k=require_k)
-            self.game.add_card_observation(
+            obs = CardObservation(val, suit, s_val, s_suit, source="capture")
+            self.state.update(
                 base_key,
-                CardObservation(value=val, suit=suit, value_score=s_val, suit_score=s_suit, source="capture"),
+                obs,
+                frame_idx,
+                num_th=float(num_th),
+                suit_th=float(suit_th),
+                require_k=int(require_k),
             )
+            if hasattr(self.game, "add_card_observation"):
+                self.game.add_card_observation(base_key, obs)
+
         return self.state.snapshot()
 
 
-# ==========================================
-# capture_source.py — vidéo → frames PIL
-# ==========================================
-# from __future__ import annotations
-from typing import Iterator
-import cv2
-import numpy as np
-from PIL import Image
+# ==============================
+# capture_source — vidéo → frames PIL
+# ==============================
+
 
 class VideoFrameSource:
     def __init__(self, path: str, *, bgr_to_rgb: bool = True) -> None:
@@ -2429,16 +2698,14 @@ class VideoFrameSource:
         self.cap.release()
 
 
-# ==========================================
-# labeler_cli.py — collecte des inconnus & labellisation simple
-# ==========================================
-# from __future__ import annotations
-from typing import Optional
-from pathlib import Path
-from PIL import Image
+# ==============================
+# labeler_cli — collecte des inconnus & labellisation simple
+# ==============================
+
 
 class SampleSink:
     """Sauvegarde les extraits non reconnus vers config/<game>/unlabeled/{numbers|suits}/."""
+
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
@@ -2453,6 +2720,7 @@ class SampleSink:
         p.parent.mkdir(parents=True, exist_ok=True)
         img.save(p)
         return p
+
 
 class InteractiveLabeler:
     def __init__(self, cards_root: Path) -> None:
@@ -2471,23 +2739,15 @@ class InteractiveLabeler:
         return dst
 
 
-# ==========================================
-# run_video_validate.py — CLI: vidéo → détection en ligne + stockage inconnus
-# ==========================================
-# from __future__ import annotations
-import argparse
-from typing import Optional
-
-# from controller import TableController
-# from capture_source import VideoFrameSource
-# from cards_core import extract_region_images, is_card_present
-# from labeler_cli import SampleSink
-
-from pathlib import Path
+# ==============================
+# run_video_validate — CLI vidéo → détection en ligne + stockage inconnus
+# ==============================
 
 
-def main(argv: Optional[list] = None) -> int:
-    parser = argparse.ArgumentParser(description="Valide détection cartes sur une vidéo (crop+match+mémoire)")
+def main_video_validate(argv: Optional[list] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Valide détection cartes sur une vidéo (crop+match+mémoire)"
+    )
     parser.add_argument("--game", default="PMU")
     parser.add_argument("--game-dir")
     parser.add_argument("--video", required=True)
@@ -2504,10 +2764,18 @@ def main(argv: Optional[list] = None) -> int:
     for i, frame in enumerate(VideoFrameSource(args.video)):
         if i % max(1, int(args.stride)) != 0:
             continue
-        snap = ctrl.process_frame(frame, i, num_th=float(args.num_th), suit_th=float(args.suit_th), require_k=int(args.require_k))
+
+        snap = ctrl.process_frame(
+            frame,
+            i,
+            num_th=float(args.num_th),
+            suit_th=float(args.suit_th),
+            require_k=int(args.require_k),
+        )
+
         # stocker les inconnus (option basique: si zone présente mais non stable)
         crop, _ = crop_from_size_and_offset(frame, ctrl.size, ctrl.ref_offset, reference_img=ctrl.ref_img)
-        pairs = extract_region_images(crop, ctrl.regions, pad=4)
+        pairs = collect_card_patches(crop, ctrl.regions, pad=4)
         for base_key, (patch_num, patch_suit) in pairs.items():
             if not is_card_present(patch_num):
                 continue
@@ -2516,26 +2784,25 @@ def main(argv: Optional[list] = None) -> int:
                 # pas encore reconnu → on garde un échantillon pour labellisation ultérieure
                 sink.save_number(base_key, patch_num, i)
                 sink.save_suit(base_key, patch_suit, i)
+
         # Affiche un résumé court
-        pretty = ", ".join([f"{k}:{v['value'] or '?'}-{v['suit'] or '?'}(s{v['stable']})" for k, v in sorted(snap.items())])
+        pretty = ", ".join(
+            [
+                f"{k}:{v['value'] or '?'}-{v['suit'] or '?'}(s{v['stable']})"
+                for k, v in sorted(snap.items())
+            ]
+        )
         print(f"frame {i:05d}: {pretty}")
 
     return 0
 
 
-if __name__ == "__main__":
-    import sys
-    raise SystemExit(main(sys.argv[1:]))
+# --- Helpers: default video path + dedupe hash (utiles pour run_video_validate) ---
 
-
-# --- Helpers: default video path + dedupe hash (to paste into run_video_validate.py) ---
-from pathlib import Path
-from typing import Optional
-import numpy as np
-from PIL import Image
 
 def _auto_video_for_game(game_dir: Path) -> Optional[Path]:
     """Retourne config/<game>/cards_video.{avi,mp4,mkv,mov} si présent; sinon None."""
+
     for ext in (".avi", ".mp4", ".mkv", ".mov"):
         p = game_dir / f"cards_video{ext}"
         if p.exists():
@@ -2545,36 +2812,49 @@ def _auto_video_for_game(game_dir: Path) -> Optional[Path]:
 
 def _ahash(img: Image.Image, hash_size: int = 8) -> str:
     """Average-hash (8x8 par défaut) pour éviter de sauvegarder des doublons d'extraits."""
+
     g = img.convert("L").resize((hash_size, hash_size), Image.BILINEAR)
     arr = np.array(g, dtype=np.float32)
     mean = float(arr.mean())
     # bitstring stable
     return "".join("1" if v > mean else "0" for v in arr.flatten())
 
-# Exemple d'usage dans main():
-#   video_path = Path(args.video) if args.video else _auto_video_for_game(game_dir)
-#   seen_hash_numbers, seen_hash_suits = set(), set()
-#   ...
-#   hn, hs = _ahash(patch_num), _ahash(patch_suit)
-#   if hn not in seen_hash_numbers: sink.save_number(base_key, patch_num, i); seen_hash_numbers.add(hn)
-#   if hs not in seen_hash_suits:   sink.save_suit(base_key, patch_suit, i);   seen_hash_suits.add(hs)
+
+# ==============================
+# Point d'entrée unifié
+# ==============================
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    # Heuristique simple : si --video est présent, on lance le mode vidéo,
+    # sinon la validation sur image fixe.
+    if "--video" in argv:
+        raise SystemExit(main_video_validate(argv))
+    else:
+        raise SystemExit(main_cards_validate(argv))
 
 ```
 ### scripts/crop_core.py
 ```python
-# ==============================
-# crop_core.py — Coeur mémoire (size + ref_offset)
-# ==============================
-from __future__ import annotations
-from typing import Tuple, Dict, Optional
-from pathlib import Path
+import sys
 
-import numpy as np
-from PIL import Image
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
 import cv2
 import json
+import numpy as np
+from PIL import Image
 
-from objet.services.game import Game
+
+# ==============================
+# crop_core.py – Coeur mémoire (size + ref_offset)
+# ==============================
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+
 
 # ---------- Matching ----------
 
@@ -2594,6 +2874,35 @@ def find_crop_top_left_by_matching(screenshot_img: Image.Image, crop_img: Image.
     result = cv2.matchTemplate(scr_gray, crop_gray, cv2.TM_CCOEFF_NORMED)
     _, _, _, loc = cv2.minMaxLoc(result)
     return int(loc[0]), int(loc[1])
+
+
+def _match_top_left_and_score(
+    src_img: Image.Image,
+    tmpl_img: Image.Image,
+    method: int = cv2.TM_CCOEFF_NORMED,
+) -> Tuple[Tuple[int, int], float]:
+    """Retourne ((x,y), score) du meilleur match de tmpl_img dans src_img.
+    Le score est normalisé: plus haut = meilleur, quel que soit le method.
+    """
+    src_gray = cv2.cvtColor(np.array(src_img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    tpl_gray = cv2.cvtColor(np.array(tmpl_img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    res = cv2.matchTemplate(src_gray, tpl_gray, method)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+    if method in (cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED):
+        score = 1.0 - float(min_val)
+        loc = min_loc
+    else:
+        score = float(max_val)
+        loc = max_loc
+    return (int(loc[0]), int(loc[1])), float(score)
+
+
+# ---------- Paramètres internes (non exposés) ----------
+_REF_METHOD = cv2.TM_CCOEFF_NORMED
+_REF_THRESHOLD = 0.80          # seuil de détection plein écran
+_INSIDE_THRESHOLD = 0.80       # seuil de détection dans le crop
+_GEOM_TOL = 1                  # tolérance géométrique intra-crop (px)
+
 
 # ---------- Géométrie ----------
 
@@ -2618,6 +2927,7 @@ def _clamp_origin(x0: int, y0: int, size: Tuple[int,int], canvas: Tuple[int,int]
     y0 = max(0, min(y0, max(0, H - h)))
     return x0, y0
 
+
 # ---------- Crop runtime (mémoire) ----------
 
 def crop_from_size_and_offset(
@@ -2625,14 +2935,17 @@ def crop_from_size_and_offset(
     size: Tuple[int,int],
     ref_offset: Tuple[int,int],  # offset du point REF vers le coin haut-gauche de la fenêtre
     *,
-    reference_img: Optional[Image.Image] = None,
-    reference_point: Optional[Tuple[int,int]] = None,
-) -> Tuple[Image.Image, Tuple[int,int]]:
+    reference_img: Image.Image,  # requis
+) -> Tuple[Optional[Image.Image], Optional[Tuple[int,int]]]:
     """Retourne (crop, (x0,y0)).
 
+    Comportement tolérant : si l'ancre n'est pas détectée sur le plein écran OU
+    si elle n'est pas validée *dans* le crop (score/tolérance internes), retourne (None, None).
+
     - `size` = (W,H) de la fenêtre à extraire.
-    - `ref_offset` = (ox,oy) = position RELATIVE du gabarit `me` *dans* la fenêtre (distance depuis le coin haut-gauche de la fenêtre jusqu'au coin haut-gauche de `me`).
-    - `reference_point` ou `reference_img` sert à retrouver la position absolue de `me` dans le screenshot.
+    - `ref_offset` = (ox,oy) = position RELATIVE du gabarit `reference_img` *dans* la fenêtre
+      (distance depuis le coin haut-gauche de la fenêtre jusqu'au coin haut-gauche de `reference_img`).
+    - `reference_img` sert à retrouver la position absolue de l'ancre dans le screenshot.
 
     Coin du crop = REF_ABS - ref_offset. Clamp si nécessaire.
     """
@@ -2641,17 +2954,35 @@ def crop_from_size_and_offset(
     if W <= 0 or H <= 0:
         raise ValueError("Invalid size; width/height must be > 0")
 
-    if reference_point is None:
-        if reference_img is None:
-            raise ValueError("Provide reference_point or reference_img")
-        reference_point = find_ref_point(screenshot_img, reference_img)
+    # 1) Détection de l'ancre sur le screenshot
+    (rx, ry), score = _match_top_left_and_score(screenshot_img, reference_img, method=_REF_METHOD)
+    if score < _REF_THRESHOLD:
+        return None, None
 
-    rx, ry = int(reference_point[0]), int(reference_point[1])
+    # 2) Calcul du crop (avec clamp)
     x0_raw, y0_raw = rx - ox, ry - oy
     x0, y0 = _clamp_origin(x0_raw, y0_raw, (W, H), screenshot_img.size)
     x1, y1 = x0 + W, y0 + H
     crop = screenshot_img.crop((x0, y0, x1, y1))
+
+    # 3) Validation intra-crop (obligatoire, non paramétrable)
+    ref_w, ref_h = reference_img.size
+    ax_exp, ay_exp = rx - x0, ry - y0  # position attendue de l’ancre dans le crop
+
+    # L’ancre doit tenir entièrement dans le crop
+    if not (0 <= ax_exp <= W - ref_w and 0 <= ay_exp <= H - ref_h):
+        return None, None
+
+    # Matching dans le crop
+    (ax_found, ay_found), inside_score = _match_top_left_and_score(crop, reference_img, method=_REF_METHOD)
+    ok_score = inside_score >= _INSIDE_THRESHOLD
+    ok_geom = (abs(ax_found - ax_exp) <= _GEOM_TOL) and (abs(ay_found - ay_exp) <= _GEOM_TOL)
+
+    if not (ok_score and ok_geom):
+        return None, None
+
     return crop, (x0, y0)
+
 
 # ---------- Comparaison / Vérif ----------
 
@@ -2666,28 +2997,33 @@ def _compare_images(img_a: Image.Image, img_b: Image.Image, pix_tol: int = 0) ->
     return (max_diff <= int(pix_tol)), {"max_diff": float(max_diff), "mean_diff": mean_diff}
 
 
+
 def verify_geom(
     screenshot_img: Image.Image,
     expected_img: Image.Image,
     size: Tuple[int,int],
     ref_offset: Tuple[int,int],
     *,
-    reference_img: Optional[Image.Image] = None,
-    reference_point: Optional[Tuple[int,int]] = None,
+    reference_img: Image.Image,
     geom_tol: int = 1,
     pix_tol: int = 0,
 ) -> Tuple[bool, Dict[str, float]]:
     """Vérifie l'ALIGNEMENT géométrique:
-       - prédit (px,py) via (size, ref_offset, ref_point)
+       - prédit (px,py) via (size, ref_offset, ancre)
        - mesure (mx,my) en matchant expected_img dans screenshot
        OK si |px-mx|<=geom_tol et |py-my|<=geom_tol.
        Ajoute stats pixel (max_diff/mean_diff) à titre informatif.
     """
-    # prédit via runtime
-    crop_pred, (px, py) = crop_from_size_and_offset(
-        screenshot_img, size, ref_offset, reference_img=reference_img, reference_point=reference_point
+    # 1) prédiction via runtime (tolérant)
+    crop_pred, origin = crop_from_size_and_offset(
+        screenshot_img, size, ref_offset, reference_img=reference_img
     )
-    # mesure via matching
+    if crop_pred is None or origin is None:
+        return False, {"reason": "anchor_not_found_or_invalid"}
+
+    px, py = origin
+
+    # 2) mesure via matching
     mx, my = find_crop_top_left_by_matching(screenshot_img, expected_img)
 
     dx, dy = int(px - mx), int(py - my)
@@ -2696,6 +3032,7 @@ def verify_geom(
     ok_pix, pix_stats = _compare_images(crop_pred, expected_img, pix_tol)
     stats = {"pred_top_left": (px, py), "match_top_left": (mx, my), "dx": float(dx), "dy": float(dy), **pix_stats}
     return ok_geom, stats
+
 
 # ---------- Inference offset ----------
 
@@ -2716,6 +3053,7 @@ def infer_size_and_offset(
     rx, ry = find_ref_point(screenshot_img, reference_img)
     ref_offset = (rx - cx, ry - cy)
     return size, ref_offset, (cx, cy), (rx, ry)
+
 
 # ---------- JSON helpers ----------
 
@@ -2833,7 +3171,8 @@ def main(argv: Optional[list] = None) -> int:
     scr = _load_image(screenshot_path).convert("RGBA")
     exp = _load_image(expected_path).convert("RGBA")
     ref = _load_image(reference_path).convert("RGBA")
-
+    
+    from objet.services.game import Game
     game = Game.for_script(Path(__file__).name)
 
     # 1) Taille + offset (inférence par défaut)
@@ -2846,7 +3185,7 @@ def main(argv: Optional[list] = None) -> int:
         size_inf, ref_off_inf, crop_pos, ref_pos = infer_size_and_offset(scr, exp, ref)
         size = args.size if args.size else size_inf
         ref_offset = args.ref_offset if args.ref_offset else ref_off_inf
-        print("[infer] crop_top_left:", crop_pos, "ref_point:", ref_pos, "→ ref_offset:", ref_off_inf, "size:", size_inf)
+        print("[infer] crop_top_left:", crop_pos, "ref_point:", ref_pos, "-> ref_offset:", ref_off_inf, "size:", size_inf)
 
     # 2) Écrit JSON (taille + ref_offset)
     from __main__ import save_capture_json  # adjust import if split
@@ -2863,7 +3202,6 @@ def main(argv: Optional[list] = None) -> int:
         ok, stats = verify_geom(
             scr, exp, size, ref_offset,
             reference_img=ref,
-            reference_point=None,
             geom_tol=int(args.geom_tol),
             pix_tol=int(args.pix_tol),
         )
@@ -2872,15 +3210,17 @@ def main(argv: Optional[list] = None) -> int:
         if ok:
             ok_count += 1
 
-    # 4) Sauvegarde debug systématique
+    # 4) Sauvegarde debug (si calcul possible)
     crop, origin = crop_from_size_and_offset(scr, size, ref_offset, reference_img=ref)
     debug_path = _with_debug_suffix(expected_path)
-    _save_any(debug_path, crop)
-    print("Wrote computed crop (debug):", debug_path, "origin:", origin)
-
-    if args.write_crop:
-        _save_any(Path(args.write_crop), crop)
-        print("Wrote computed crop (custom):", args.write_crop)
+    if crop is not None and origin is not None:
+        _save_any(debug_path, crop)
+        print("Wrote computed crop (debug):", debug_path, "origin:", origin)
+        if args.write_crop:
+            _save_any(Path(args.write_crop), crop)
+            print("Wrote computed crop (custom):", args.write_crop)
+    else:
+        print("No debug crop written: anchor not found/validated.")
 
     print(f"Summary: {ok_count}/{args.runs} OK (geom_tol={args.geom_tol}, pix_tol={args.pix_tol})")
     print("Game capture context:", game.table.captures.table_capture)
@@ -2890,6 +3230,7 @@ def main(argv: Optional[list] = None) -> int:
 if __name__ == "__main__":
     import sys
     raise SystemExit(main(sys.argv[1:]))
+
 ```
 ### scripts/Crop_Video_Frames.py
 ```python
@@ -3144,8 +3485,8 @@ import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
 
-from capture_cards import TemplateIndex, is_card_present, recognize_number_and_suit
-from _utils import extract_region_images, load_coordinates
+from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
+from _utils import collect_card_patches, load_coordinates
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -3225,7 +3566,7 @@ def collect_card_samples(
         except FileNotFoundError:
             continue
 
-        card_pairs = extract_region_images(table_img, regions, pad=0)
+        card_pairs = collect_card_patches(table_img, regions, pad=0)
         for base_key, (num_patch, suit_patch) in card_pairs.items():
             if not is_card_present(num_patch, threshold=215, min_ratio=0.04):
                 continue
@@ -3610,13 +3951,13 @@ import customtkinter as ctk
 import tkinter as tk
 
 # Dépend de votre module existant
-# capture_cards: TemplateIndex, recognize_number_and_suit, extract_region_images, is_card_present
-from capture_cards import (
+# capture_cards: TemplateIndex, recognize_number_and_suit, collect_card_patches, is_card_present
+from objet.scanner.cards_recognition import (
     TemplateIndex,
     recognize_number_and_suit,
-    extract_region_images,
     is_card_present,
 )
+from objet.utils.calibration import collect_card_patches
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -3834,7 +4175,7 @@ class CardIdentifier:
         interactive: bool = True,
         force_all: bool = False,
     ) -> IdentifyResult:
-        pairs = extract_region_images(table_img.convert("RGB"), regions, pad=0)
+        pairs = collect_card_patches(table_img.convert("RGB"), regions, pad=0)
         if base_key not in pairs:
             return IdentifyResult("?", "?", {"source": "error", "reason": "region-missing"})
         num_patch, suit_patch = pairs[base_key]
@@ -5083,114 +5424,228 @@ if __name__ == "__main__":
     app.run()
 
 ```
-### scripts/state_requirements.py
+### scripts/pyauto_helpers.py
 ```python
-"""Definitions des portions d'état utilisées par les scripts de workflow.
-
-Ce module centralise la cartographie demandée afin que les outils ou
-l'interface puissent instancier :class:`objet.services.game.Game` avec les éléments
-pertinents pour chaque script. Les catégories sont volontairement grossières
-(cartes, boutons, métriques, captures) et couvrent les besoins majeurs des
-workflows existants.
-"""
+"""Thin wrapper around :mod:`objet.utils.pyauto` for backwards compatibility."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
-from typing import Dict, FrozenSet
+from objet.utils.pyauto import locate_in_image
+
+__all__ = ["locate_in_image"]
+
+```
+### scripts/quick_setup.py
+```python
+#!/usr/bin/env python3
+"""quick_setup.py — pipeline de configuration rapide pour la capture des cartes.
+
+Ce script enchaîne les étapes manuelles existantes :
+  1. Éditer les zones via l'UI CustomTkinter.
+  2. Rogner une vidéo test pour générer des crops.
+  3. Identifier/labelliser les cartes manquantes.
+  4. Valider la capture complète sur une vidéo.
+
+Chaque étape peut être sautée avec --skip-*."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Callable, List, Optional, Sequence, Tuple
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
-class StatePortion(str, Enum):
-    """Portions logiques de l'état de jeu consommées par les scripts."""
-
-    CARDS = "cards"
-    BUTTONS = "buttons"
-    METRICS = "metrics"
-    CAPTURES = "captures"
+def _print_header(title: str) -> None:
+    line = "=" * max(10, len(title) + 4)
+    print(f"\n{line}\n  {title}\n{line}")
 
 
-@dataclass(frozen=True)
-class ScriptStateUsage:
-    """Description des portions d'état nécessaires à un script."""
+def _run_zone_editor(game: str, config_root: Path) -> int:
+    from position_zones_ctk import ZoneEditorCTK
 
-    name: str
-    portions: FrozenSet[StatePortion]
-    description: str
-
-
-SCRIPT_STATE_USAGE: Dict[str, ScriptStateUsage] = {
-    "capture_cards.py": ScriptStateUsage(
-        name="capture_cards.py",
-        portions=frozenset({StatePortion.CARDS, StatePortion.CAPTURES}),
-        description="Extraction et reconnaissance des cartes depuis une capture.",
-    ),
-    "Crop_Video_Frames.py": ScriptStateUsage(
-        name="Crop_Video_Frames.py",
-        portions=frozenset({StatePortion.CAPTURES}),
-        description="Découpe périodique des captures vidéo à partir des paramètres de table.",
-    ),
-    "crop_core.py": ScriptStateUsage(
-        name="crop_core.py",
-        portions=frozenset({StatePortion.CAPTURES}),
-        description="Fonctions communes de capture/crop et outils de validation géométrique.",
-    ),
-    "position_zones.py": ScriptStateUsage(
-        name="position_zones.py",
-        portions=frozenset(
-            {
-                StatePortion.CAPTURES,
-                StatePortion.CARDS,
-                StatePortion.BUTTONS,
-                StatePortion.METRICS,
-            }
-        ),
-        description="Éditeur Tk classique des zones OCR (cartes, boutons, métriques).",
-    ),
-    "position_zones_ctk.py": ScriptStateUsage(
-        name="position_zones_ctk.py",
-        portions=frozenset(
-            {
-                StatePortion.CAPTURES,
-                StatePortion.CARDS,
-                StatePortion.BUTTONS,
-                StatePortion.METRICS,
-            }
-        ),
-        description="Éditeur CustomTkinter des zones OCR (cartes, boutons, métriques).",
-    ),
-    "zone_project.py": ScriptStateUsage(
-        name="zone_project.py",
-        portions=frozenset(
-            {
-                StatePortion.CAPTURES,
-                StatePortion.CARDS,
-                StatePortion.BUTTONS,
-                StatePortion.METRICS,
-            }
-        ),
-        description="Modèle et opérations associées aux projets de zones OCR.",
-    ),
-    "copy_python_sources.py": ScriptStateUsage(
-        name="copy_python_sources.py",
-        portions=frozenset(),
-        description="Outil utilitaire sans dépendance sur l'état de jeu.",
-    ),
-}
+    app = ZoneEditorCTK(base_dir=str(config_root))
+    if game:
+        try:
+            app.game_var.set(game)
+            app._on_select_game(game)  # type: ignore[attr-defined]
+            print(f"ZoneEditor prêt sur le jeu '{game}'. Fermez la fenêtre pour continuer…")
+        except Exception as exc:  # pragma: no cover - dépend de l'état local
+            print(f"[WARN] Impossible de précharger le jeu '{game}': {exc}")
+    app.run()
+    return 0
 
 
-def describe_scripts() -> Dict[str, Dict[str, str]]:
-    """Retourne un dictionnaire sérialisable listant les usages déclarés."""
+def _run_crop(game_dir: Path, video: Optional[str], interval: float, out_dir: Optional[Path]) -> int:
+    from Crop_Video_Frames import main as crop_main
 
-    return {
-        name: {
-            "portions": sorted(usage.portions),
-            "description": usage.description,
-        }
-        for name, usage in SCRIPT_STATE_USAGE.items()
-    }
+    argv: List[str] = ["--game-dir", str(game_dir)]
+    if video:
+        argv += ["--video", video]
+    if interval is not None:
+        argv += ["--interval", str(interval)]
+    if out_dir is not None:
+        argv += ["--out", str(out_dir)]
+    return int(crop_main(argv))
 
 
-__all__ = ["StatePortion", "ScriptStateUsage", "SCRIPT_STATE_USAGE", "describe_scripts"]
+def _run_identify(game: str, crops_dir: Optional[Path], threshold: float, strict: float, trim: int, force_all: bool) -> int:
+    from identify_card import main as identify_main
+
+    argv: List[str] = ["--game", game, "--threshold", str(threshold), "--strict", str(strict), "--trim", str(trim)]
+    if crops_dir is not None:
+        argv += ["--crops-dir", str(crops_dir)]
+    if force_all:
+        argv.append("--force-all")
+    return int(identify_main(argv))
+
+
+def _run_capture_video(
+    game: str,
+    game_dir: Path,
+    video: Optional[str],
+    stride: int,
+    num_th: float,
+    suit_th: float,
+    require_k: int,
+) -> int:
+    from capture_cards import main as capture_main
+
+    argv: List[str] = [
+        "--game",
+        game,
+        "--game-dir",
+        str(game_dir),
+        "--stride",
+        str(stride),
+        "--num-th",
+        str(num_th),
+        "--suit-th",
+        str(suit_th),
+        "--require-k",
+        str(require_k),
+    ]
+    if video:
+        argv += ["--video", video]
+    else:
+        raise SystemExit("La validation vidéo nécessite --video.")
+    return int(capture_main(argv))
+
+
+def parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Assistant de configuration rapide (zones → crops → cartes → capture)")
+    parser.add_argument("--game", default="PMU", help="Nom du jeu (dossier dans config/)")
+    parser.add_argument("--config-root", help="Chemin vers le dossier config/ (défaut: auto)")
+    parser.add_argument("--video", help="Vidéo utilisée pour le crop et la validation")
+    parser.add_argument("--crops-dir", help="Dossier de sortie des crops (défaut: config/<game>/debug/crops)")
+    parser.add_argument("--crop-interval", type=float, default=3.0, help="Intervalle (s) entre deux crops vidéo")
+    parser.add_argument("--identify-threshold", type=float, default=0.92, help="Seuil reco acceptée")
+    parser.add_argument("--identify-strict", type=float, default=0.985, help="Seuil autoskip strict")
+    parser.add_argument("--identify-trim", type=int, default=6, help="Rognage autour des patches (px)")
+    parser.add_argument("--identify-force-all", action="store_true", help="Forcer l'UI sur toutes les cartes")
+    parser.add_argument("--capture-stride", type=int, default=3, help="Traiter un frame sur N pour la validation vidéo")
+    parser.add_argument("--capture-num-th", type=float, default=0.65, help="Seuil reconnaissance des valeurs")
+    parser.add_argument("--capture-suit-th", type=float, default=0.65, help="Seuil reconnaissance des couleurs")
+    parser.add_argument("--capture-require-k", type=int, default=2, help="Frames nécessaires pour stabiliser")
+    parser.add_argument("--skip-zone-editor", action="store_true", help="Sauter l'étape d'édition des zones")
+    parser.add_argument("--skip-crop", action="store_true", help="Sauter l'étape de crop vidéo")
+    parser.add_argument("--skip-identify", action="store_true", help="Sauter l'étape d'identification des cartes")
+    parser.add_argument("--skip-capture", action="store_true", help="Sauter la validation capture")
+    parser.add_argument("--continue-on-error", action="store_true", help="Continuer même si une étape échoue")
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv or sys.argv[1:])
+
+    config_root = Path(args.config_root).resolve() if args.config_root else (PROJECT_ROOT / "config").resolve()
+    game_dir = (config_root / args.game).resolve()
+    if not game_dir.exists():
+        print(f"ERREUR: dossier du jeu introuvable ({game_dir})")
+        return 2
+
+    crops_dir = Path(args.crops_dir).resolve() if args.crops_dir else (game_dir / "debug" / "crops")
+
+    steps: List[Tuple[str, Callable[[], int]]] = []
+    if not args.skip_zone_editor:
+        steps.append(("Édition des zones", lambda: _run_zone_editor(args.game, config_root)))
+    if not args.skip_crop:
+        steps.append((
+            "Crop vidéo",
+            lambda: _run_crop(game_dir, args.video, float(args.crop_interval), crops_dir),
+        ))
+    if not args.skip_identify:
+        steps.append((
+            "Identification des cartes",
+            lambda: _run_identify(
+                args.game,
+                crops_dir,
+                float(args.identify_threshold),
+                float(args.identify_strict),
+                int(args.identify_trim),
+                bool(args.identify_force_all),
+            ),
+        ))
+    if not args.skip_capture:
+        steps.append((
+            "Validation capture vidéo",
+            lambda: _run_capture_video(
+                args.game,
+                game_dir,
+                args.video,
+                int(args.capture_stride),
+                float(args.capture_num_th),
+                float(args.capture_suit_th),
+                int(args.capture_require_k),
+            ),
+        ))
+
+    status = 0
+    for title, func in steps:
+        _print_header(title)
+        try:
+            status = func()
+        except SystemExit as exc:
+            status = int(exc.code) if isinstance(exc.code, int) else 1
+        except Exception as exc:  # pragma: no cover - dépend de l'exécution temps réel
+            print(f"[ERREUR] {title}: {exc}")
+            status = 1
+        if status != 0:
+            print(f"[ECHEC] {title} (code {status})")
+            if not args.continue_on_error:
+                break
+    else:
+        print("\nConfiguration rapide terminée ✅")
+        return 0 if status == 0 else status
+
+    return status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+```
+### scripts/state_requirements.py
+```python
+"""Re-export of :mod:`objet.services.script_state` for CLI consumers."""
+from __future__ import annotations
+
+from objet.services.script_state import (
+    SCRIPT_STATE_USAGE,
+    StatePortion,
+    ScriptStateUsage,
+    describe_scripts,
+)
+
+__all__ = [
+    "StatePortion",
+    "ScriptStateUsage",
+    "SCRIPT_STATE_USAGE",
+    "describe_scripts",
+]
 
 ```
 ### scripts/zone_project.py
@@ -5479,321 +5934,6 @@ class ZoneProject:
             x, _y = self.regions[k]["top_left"]
             x, y = clamp_top_left(coerce_int(x), target_y, gw, gh, W, H)
             self.regions[k]["top_left"] = [x, y]
-
-```
-### test.py
-```python
-"""
-Nouvelle orchestration UI (Section A) — test.py
-------------------------------------------------
-Objectif :
-- UI Tkinter non bloquante avec `root.after` (pas de boucle infinie).
-- Boutons Start/Stop pour activer/désactiver le scan en continu.
-- Afficher l'état courant : cartes du joueur, board, FPS, message debug.
-- Ne PAS dépendre pour l’instant de l’OCR ni des boutons/joueurs.
-
-Intégration :
-1) Coller ce fichier comme `test.py` à la racine du projet ou dans le dossier d’exécution.
-2) Par défaut, le code démarre en mode **DEMO** (aucune dépendance). 
-   - Pour brancher le pipeline réel, voir la classe `RealPipeline` et remplacer `get_pipeline()`.
-3) Si vous gardez DEMO, lancez : `python test.py`.
-
-Points de branchement vers votre code réel :
-- Remplacer `get_pipeline()` pour retourner une instance de `RealPipeline()`.
-- Dans `RealPipeline.tick()`: appeler votre pipeline existant
-  (capture écran -> find_table -> coords -> scan_cartes -> game.update_from_scan)
-  et **retourner** un dictionnaire `scan_table` aux clés :
-    * player_card_1_number / player_card_1_symbol
-    * player_card_2_number / player_card_2_symbol
-    * board_card_1_number / board_card_1_symbol
-    * ... jusqu’à board_card_5_* 
-  Les valeurs : number ∈ {"A","K","Q","J","10","9",...}, symbol ∈ {"spades","hearts","diamonds","clubs"} ou None.
-
-Robustesse :
-- Aucune dépendance aux boutons/players. Tout est optionnel.
-- Exceptions capturées dans `tick()`, affichées en UI, scan stoppé proprement.
-"""
-from __future__ import annotations
-
-import os
-import random
-import time
-import tkinter as tk
-from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
-
-
-# =====================
-# Utils (formatage UI)
-# =====================
-SUIT_TO_SYMBOL = {
-    "spades": "♠",
-    "hearts": "♥",
-    "diamonds": "♦",
-    "clubs": "♣",
-}
-
-CARD_ORDER = ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"]
-SUITS = list(SUIT_TO_SYMBOL.keys())
-
-
-def format_card(value: Optional[str], suit: Optional[str]) -> str:
-    if not value or not suit:
-        return "?"
-    return f"{value}{SUIT_TO_SYMBOL.get(suit, '?')}"
-
-
-# =====================
-# Pipelines (DEMO / REAL)
-# =====================
-class BasePipeline:
-    """Interface minimale d'un pipeline de scan.
-
-    Doit fournir :
-      - tick() -> Dict[str, Dict[str, Optional[str]]]
-        Retourne un `scan_table` (clé -> {"value": <str|None>}).
-    """
-
-    def tick(self) -> Dict[str, Dict[str, Optional[str]]]:  # pragma: no cover - interface
-        raise NotImplementedError
-
-
-class DemoPipeline(BasePipeline):
-    """Pipeline de démonstration (aucune dépendance à votre code).
-
-    Génère aléatoirement des cartes pour simuler un scan live.
-    """
-
-    def __init__(self) -> None:
-        self._last_update = 0.0
-        self._state = self._empty_table()
-
-    @staticmethod
-    def _empty_table() -> Dict[str, Dict[str, Optional[str]]]:
-        table: Dict[str, Dict[str, Optional[str]]] = {}
-        # joueurs (2 cartes)
-        for i in (1, 2):
-            table[f"player_card_{i}_number"] = {"value": None}
-            table[f"player_card_{i}_symbol"] = {"value": None}
-        # board (5 cartes)
-        for i in range(1, 6):
-            table[f"board_card_{i}_number"] = {"value": None}
-            table[f"board_card_{i}_symbol"] = {"value": None}
-        return table
-
-    def _random_card(self) -> Tuple[str, str]:
-        return random.choice(CARD_ORDER), random.choice(SUITS)
-
-    def tick(self) -> Dict[str, Dict[str, Optional[str]]]:
-        now = time.time()
-        # Met à jour environ toutes les 0.8s pour visualiser les changements
-        if now - self._last_update > 0.8:
-            self._last_update = now
-            st = self._empty_table()
-            # 70% de chance d'avoir des cartes joueur
-            if random.random() < 0.7:
-                v, s = self._random_card()
-                st["player_card_1_number"]["value"] = v
-                st["player_card_1_symbol"]["value"] = s
-            if random.random() < 0.7:
-                v, s = self._random_card()
-                st["player_card_2_number"]["value"] = v
-                st["player_card_2_symbol"]["value"] = s
-            # board progressif
-            board_count = random.randint(0, 5)
-            for i in range(1, board_count + 1):
-                v, s = self._random_card()
-                st[f"board_card_{i}_number"]["value"] = v
-                st[f"board_card_{i}_symbol"]["value"] = s
-            self._state = st
-        return self._state
-
-
-class RealPipeline(BasePipeline):
-    """Branchez ICI votre pipeline existant.
-
-    TODO (à faire côté projet) :
-      - Importer vos vraies classes (ScanTable, Game, Controller si nécessaire)
-      - Implémenter `tick()` pour :
-          1) exécuter un scan écran/table
-          2) mettre à jour l'état du jeu
-          3) retourner un dict `scan_table` aux clés attendues
-    """
-
-    def __init__(self) -> None:
-        # Exemple (à adapter) :
-        # from src.scan import ScanTable
-        # from src.game import Game
-        # self.scan = ScanTable()
-        # self.game = Game()
-        raise NotImplementedError("Branchez votre pipeline et retirez cette exception.")
-
-    def tick(self) -> Dict[str, Dict[str, Optional[str]]]:  # pragma: no cover - intégration projet
-        # Exemple d'implémentation :
-        # success = self.scan.scan()
-        # if success:
-        #     self.game.update_from_scan(self.scan.table)
-        # return self.scan.table
-        raise NotImplementedError
-
-
-def get_pipeline() -> BasePipeline:
-    """Choisit le pipeline. Par défaut : DEMO.
-    Pour passer en réel, remplacez par `return RealPipeline()`.
-    """
-    if os.environ.get("POKER_UI_PIPELINE", "DEMO").upper() == "REAL":
-        return RealPipeline()  # lèvera NotImplemented tant que non branché
-    return DemoPipeline()
-
-
-# =====================
-# Contrôleur UI + boucle after
-# =====================
-@dataclass
-class UiState:
-    player_cards: Tuple[str, str]
-    board_cards: Tuple[str, str, str, str, str]
-    message: str
-    fps: float
-
-
-class App:
-    SCAN_INTERVAL_MS = 150  # ~6-7 FPS visés sans saturer la boucle Tk
-
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("Poker UI — Live Scan (A: Orchestration)")
-        self.pipeline = RealPipeline()
-
-        # Flags & perf
-        self.scanning = False
-        self._last_tick_ts = None  # type: Optional[float]
-        self._last_fps = 0.0
-
-        # Widgets
-        self._build_widgets()
-
-        # Raccourcis
-        self.root.bind("<Escape>", lambda e: self.on_close())
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
-    # -------- UI construction --------
-    def _build_widgets(self) -> None:
-        pad = {"padx": 10, "pady": 8}
-
-        # Top: boutons Start/Stop + FPS
-        top = tk.Frame(self.root)
-        top.pack(fill=tk.X, **pad)
-
-        self.btn_start = tk.Button(top, text="▶ Start", width=10, command=self.start_scan)
-        self.btn_stop = tk.Button(top, text="■ Stop", width=10, state=tk.DISABLED, command=self.stop_scan)
-        self.lbl_fps = tk.Label(top, text="FPS: 0.0")
-
-        self.btn_start.pack(side=tk.LEFT)
-        self.btn_stop.pack(side=tk.LEFT, padx=(10, 0))
-        self.lbl_fps.pack(side=tk.RIGHT)
-
-        # Player cards
-        grp_player = tk.LabelFrame(self.root, text="Vos cartes")
-        grp_player.pack(fill=tk.X, **pad)
-        self.lbl_p1 = tk.Label(grp_player, text="?", font=("Consolas", 20))
-        self.lbl_p2 = tk.Label(grp_player, text="?", font=("Consolas", 20))
-        self.lbl_p1.pack(side=tk.LEFT, padx=5)
-        self.lbl_p2.pack(side=tk.LEFT, padx=5)
-
-        # Board cards
-        grp_board = tk.LabelFrame(self.root, text="Board")
-        grp_board.pack(fill=tk.X, **pad)
-        self.lbl_b = [tk.Label(grp_board, text="?", font=("Consolas", 20)) for _ in range(5)]
-        for lab in self.lbl_b:
-            lab.pack(side=tk.LEFT, padx=5)
-
-        # Message / erreurs
-        self.lbl_msg = tk.Label(self.root, text="Prêt.")
-        self.lbl_msg.pack(fill=tk.X, **pad)
-
-    # -------- Start/Stop --------
-    def start_scan(self) -> None:
-        if self.scanning:
-            return
-        self.scanning = True
-        self.btn_start.config(state=tk.DISABLED)
-        self.btn_stop.config(state=tk.NORMAL)
-        self._last_tick_ts = time.time()
-        self._schedule_next_tick()
-
-    def stop_scan(self) -> None:
-        self.scanning = False
-        self.btn_start.config(state=tk.NORMAL)
-        self.btn_stop.config(state=tk.DISABLED)
-
-    def on_close(self) -> None:
-        self.stop_scan()
-        self.root.after(50, self.root.destroy)
-
-    # -------- Boucle after --------
-    def _schedule_next_tick(self) -> None:
-        if self.scanning:
-            self.root.after(self.SCAN_INTERVAL_MS, self.tick)
-
-    def tick(self) -> None:
-        start = time.time()
-        try:
-            scan_table = self.pipeline.tick()
-            ui_state = self._build_ui_state(scan_table)
-            self._render(ui_state)
-            # FPS
-            dt = max(1e-6, time.time() - start)
-            self._last_fps = 1.0 / dt
-            self.lbl_fps.config(text=f"FPS: {self._last_fps:.1f}")
-        except Exception as e:  # robustesse : on n'effondre pas l'UI
-            self.lbl_msg.config(text=f"Erreur: {e}")
-            self.stop_scan()
-        finally:
-            self._schedule_next_tick()
-
-    # -------- Rendu --------
-    def _build_ui_state(self, scan_table: Dict[str, Dict[str, Optional[str]]]) -> UiState:
-        def gv(k: str) -> Optional[str]:
-            d = scan_table.get(k) or {}
-            return d.get("value")
-
-        # Player
-        p1 = format_card(gv("player_card_1_number"), gv("player_card_1_symbol"))
-        p2 = format_card(gv("player_card_2_number"), gv("player_card_2_symbol"))
-
-        # Board
-        board = []
-        for i in range(1, 6):
-            board.append(format_card(gv(f"board_card_{i}_number"), gv(f"board_card_{i}_symbol")))
-        board_tup = tuple(board)  # type: ignore
-
-        # Message simple
-        known = sum(c != "?" for c in (p1, p2, *board))
-        msg = f"Cartes connues: {known}/7"
-
-        return UiState(player_cards=(p1, p2), board_cards=board_tup, message=msg, fps=self._last_fps)
-
-    def _render(self, s: UiState) -> None:
-        self.lbl_p1.config(text=s.player_cards[0])
-        self.lbl_p2.config(text=s.player_cards[1])
-        for lab, txt in zip(self.lbl_b, s.board_cards):
-            lab.config(text=txt)
-        self.lbl_msg.config(text=s.message)
-
-
-# =====================
-# Entrée programme
-# =====================
-
-def main() -> None:
-    root = tk.Tk()
-    app = App(root)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()
 
 ```
 ### tool.py

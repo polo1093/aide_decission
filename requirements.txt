@@ -2,7 +2,6 @@ numpy
 pandas
 PyAutoGUI
 pokereval
-easyocr
 keyboard
 pytweening
 opencv-python
