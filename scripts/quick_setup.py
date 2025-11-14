@@ -20,6 +20,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from objet.scanner.cards_recognition import TemplateIndex
+
+
+EXPECTED_NUMBERS: Tuple[str, ...] = (
+    "A",
+    "K",
+    "Q",
+    "J",
+    "10",
+    "9",
+    "8",
+    "7",
+    "6",
+    "5",
+    "4",
+    "3",
+    "2",
+)
+EXPECTED_SUITS: Tuple[str, ...] = ("hearts", "diamonds", "clubs", "spades")
+
 
 def _print_header(title: str) -> None:
     line = "=" * max(10, len(title) + 4)
@@ -203,7 +223,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 break
 
 
+    _report_missing_cards(game_dir)
+
     return status
+
+
+def _report_missing_cards(game_dir: Path) -> None:
+    cards_root = game_dir / "cards"
+    if not cards_root.exists():
+        print("[INFO] Aucun dossier 'cards' trouvé pour ce jeu — impossible de vérifier les gabarits.")
+        return
+
+    idx = TemplateIndex(cards_root)
+    idx.load()
+    missing = idx.check_missing(EXPECTED_NUMBERS, EXPECTED_SUITS)
+    missing_cards = idx.missing_cards(EXPECTED_NUMBERS, EXPECTED_SUITS)
+
+    if not missing["numbers"] and not missing["suits"]:
+        print("[OK] Tous les gabarits de cartes attendus sont présents.")
+        return
+
+    _print_header("Gabarits de cartes manquants")
+    if missing["numbers"]:
+        print("Numbers manquants:", ", ".join(missing["numbers"]))
+    if missing["suits"]:
+        print("Symboles manquants:", ", ".join(missing["suits"]))
+    if missing_cards:
+        print("Combinaisons de cartes impossibles:")
+        for combo in missing_cards:
+            print(f"  - {combo}")
 
 
 if __name__ == "__main__":

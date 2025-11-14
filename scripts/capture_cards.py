@@ -111,16 +111,20 @@ def main_cards_validate(argv: Optional[list] = None) -> int:
     # 1) Charger index
     idx = TemplateIndex(cards_root)
     idx.load()
-    missing = idx.check_missing(
-        expect_numbers=["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"],
-        expect_suits=["hearts", "diamonds", "clubs", "spades"],
-    )
+    expect_numbers = ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"]
+    expect_suits = ["hearts", "diamonds", "clubs", "spades"]
+    missing = idx.check_missing(expect_numbers=expect_numbers, expect_suits=expect_suits)
     if missing["numbers"] or missing["suits"]:
         print("Missing templates:")
         if missing["numbers"]:
             print("  numbers:", ", ".join(missing["numbers"]))
         if missing["suits"]:
             print("  suits:", ", ".join(missing["suits"]))
+        missing_cards = idx.missing_cards(expect_numbers, expect_suits)
+        if missing_cards:
+            print("  card combinations:")
+            for combo in missing_cards:
+                print(f"    - {combo}")
         return 2
 
     # 2) Charger table et coordonnées
