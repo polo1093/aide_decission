@@ -63,7 +63,8 @@ class Table:
         for idx, card in enumerate(self.cards.me, start=1):
             value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
                 position_value=card.card_coordinates_value,
-                position_suit=card.card_coordinates_suit
+                position_suit=card.card_coordinates_suit,
+                template_set=card.template_set,
             )
             if value is not None or suit is not None:
                 if value != card.value and suit != card.suit:
@@ -80,6 +81,7 @@ class Table:
                 value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
                     position_value=card.card_coordinates_value,
                     position_suit=card.card_coordinates_suit,
+                    template_set=card.template_set,
                 )
                 if value is None and suit is None:
                     continue

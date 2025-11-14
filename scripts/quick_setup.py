@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from objet.scanner.cards_recognition import TemplateIndex
+from objet.scanner.cards_recognition import ROOT_TEMPLATE_SET, TemplateIndex
 
 
 EXPECTED_NUMBERS: Tuple[str, ...] = (
@@ -234,24 +234,50 @@ def _report_missing_cards(game_dir: Path) -> None:
         print("[INFO] Aucun dossier 'cards' trouvé pour ce jeu — impossible de vérifier les gabarits.")
         return
 
+    print(
+        "[INFO] Organisation attendue : cards/<ensemble>/{numbers,suits}/ (ex: 'board', 'hand')."
+    )
+
     idx = TemplateIndex(cards_root)
     idx.load()
-    missing = idx.check_missing(EXPECTED_NUMBERS, EXPECTED_SUITS)
-    missing_cards = idx.missing_cards(EXPECTED_NUMBERS, EXPECTED_SUITS)
+    sets = idx.available_sets()
+    if not sets:
+        sets = [idx.default_set]
 
-    if not missing["numbers"] and not missing["suits"]:
-        print("[OK] Tous les gabarits de cartes attendus sont présents.")
-        return
+    any_missing = False
+    for set_name in sets:
+        template_set = None if set_name in (None, ROOT_TEMPLATE_SET) else set_name
+        missing = idx.check_missing(
+            EXPECTED_NUMBERS,
+            EXPECTED_SUITS,
+            template_set=template_set,
+        )
+        missing_cards = idx.missing_cards(
+            EXPECTED_NUMBERS,
+            EXPECTED_SUITS,
+            template_set=template_set,
+        )
 
-    _print_header("Gabarits de cartes manquants")
-    if missing["numbers"]:
-        print("Numbers manquants:", ", ".join(missing["numbers"]))
-    if missing["suits"]:
-        print("Symboles manquants:", ", ".join(missing["suits"]))
-    if missing_cards:
-        print("Combinaisons de cartes impossibles:")
-        for combo in missing_cards:
-            print(f"  - {combo}")
+        if not missing["numbers"] and not missing["suits"] and not missing_cards:
+            continue
+
+        if not any_missing:
+            _print_header("Gabarits de cartes manquants")
+            any_missing = True
+
+        label = template_set or "défaut"
+        print(f"Ensemble '{label}':")
+        if missing["numbers"]:
+            print("  Numbers manquants:", ", ".join(missing["numbers"]))
+        if missing["suits"]:
+            print("  Symboles manquants:", ", ".join(missing["suits"]))
+        if missing_cards:
+            print("  Combinaisons impossibles:")
+            for combo in missing_cards:
+                print(f"    - {combo}")
+
+    if not any_missing:
+        print("[OK] Tous les gabarits de cartes attendus sont présents dans chaque ensemble.")
 
 
 if __name__ == "__main__":

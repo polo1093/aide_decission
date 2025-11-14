@@ -17,6 +17,8 @@ __all__ = [
     "recognize_number_and_suit",
 ]
 
+ROOT_TEMPLATE_SET = "__root__"
+
 
 @dataclass
 class CardObservation:
@@ -30,12 +32,15 @@ class CardObservation:
 
 
 class TemplateIndex:
-    """Charge les gabarits de chiffres/figures et de symboles depuis config/<game>/cards."""
+    """Charge et organise les gabarits de cartes par *type de capture*."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.numbers: Dict[str, List[np.ndarray]] = {}
         self.suits: Dict[str, List[np.ndarray]] = {}
+        self.numbers_by_set: Dict[str, Dict[str, List[np.ndarray]]] = {}
+        self.suits_by_set: Dict[str, Dict[str, List[np.ndarray]]] = {}
+        self.default_set: str = ROOT_TEMPLATE_SET
 
     @staticmethod
     def _prep(gray: np.ndarray) -> np.ndarray:
@@ -49,8 +54,7 @@ class TemplateIndex:
         except Exception:
             return None
 
-    def _load_dir(self, sub: str) -> Dict[str, List[np.ndarray]]:
-        base = self.root / sub
+    def _load_dir(self, base: Path) -> Dict[str, List[np.ndarray]]:
         out: Dict[str, List[np.ndarray]] = {}
         if not base.exists():
             return out
@@ -68,22 +72,79 @@ class TemplateIndex:
         return out
 
     def load(self) -> None:
-        self.numbers = self._load_dir("numbers")
-        self.suits = self._load_dir("suits")
+        """Charge les gabarits disponibles et détecte les ensembles déclarés."""
+
+        self.numbers_by_set = {}
+        self.suits_by_set = {}
+        default: Optional[str] = None
+
+        # 1) compat héritage : gabarits directement dans root/numbers|suits
+        legacy_numbers = self._load_dir(self.root / "numbers")
+        legacy_suits = self._load_dir(self.root / "suits")
+        if legacy_numbers or legacy_suits:
+            self.numbers_by_set[ROOT_TEMPLATE_SET] = legacy_numbers
+            self.suits_by_set[ROOT_TEMPLATE_SET] = legacy_suits
+            default = ROOT_TEMPLATE_SET
+
+        # 2) Sous-dossiers (board/, hand/, ...)
+        for subdir in sorted(self.root.iterdir()):
+            if not subdir.is_dir():
+                continue
+            numbers = self._load_dir(subdir / "numbers")
+            suits = self._load_dir(subdir / "suits")
+            if not numbers and not suits:
+                continue
+            key = subdir.name
+            self.numbers_by_set[key] = numbers
+            self.suits_by_set[key] = suits
+            if default is None and ROOT_TEMPLATE_SET not in self.numbers_by_set:
+                default = key
+
+        if default is None:
+            # Aucun ensemble explicite → utiliser le premier trouvé ou root
+            union_keys = list({*self.numbers_by_set.keys(), *self.suits_by_set.keys()})
+            default = union_keys[0] if union_keys else ROOT_TEMPLATE_SET
+
+        self.default_set = default
+        self.numbers = self.numbers_by_set.get(default, {})
+        self.suits = self.suits_by_set.get(default, {})
+
+    def _normalise_set(self, template_set: Optional[str]) -> str:
+        if template_set:
+            return template_set
+        return self.default_set
+
+    def get_templates(
+        self, template_set: Optional[str] = None
+    ) -> Tuple[Dict[str, List[np.ndarray]], Dict[str, List[np.ndarray]]]:
+        key = self._normalise_set(template_set)
+        numbers = self.numbers_by_set.get(key, {})
+        suits = self.suits_by_set.get(key, {})
+        if not numbers and not suits and template_set:
+            # Ensemble explicitement demandé mais vide → pas de fallback implicite.
+            return {}, {}
+        return numbers, suits
+
+    def available_sets(self) -> List[str]:
+        keys = { *self.numbers_by_set.keys(), *self.suits_by_set.keys() }
+        return sorted(keys)
 
     def check_missing(
         self,
         expect_numbers: Optional[Iterable[str]] = None,
         expect_suits: Optional[Iterable[str]] = None,
+        *,
+        template_set: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         miss: Dict[str, List[str]] = {"numbers": [], "suits": []}
+        numbers, suits = self.get_templates(template_set)
         if expect_numbers:
             for v in expect_numbers:
-                if v not in self.numbers:
+                if v not in numbers:
                     miss["numbers"].append(v)
         if expect_suits:
             for s in expect_suits:
-                if s not in self.suits:
+                if s not in suits:
                     miss["suits"].append(s)
         return miss
 
@@ -91,6 +152,8 @@ class TemplateIndex:
         self,
         expect_numbers: Iterable[str],
         expect_suits: Iterable[str],
+        *,
+        template_set: Optional[str] = None,
     ) -> List[str]:
         """Liste les combinaisons valeur/couleur impossibles faute de gabarits.
 
@@ -98,8 +161,9 @@ class TemplateIndex:
         annotée avec la ou les références manquantes (valeur ou couleur).
         """
 
-        numbers_available = set(self.numbers)
-        suits_available = set(self.suits)
+        numbers, suits = self.get_templates(template_set)
+        numbers_available = set(numbers)
+        suits_available = set(suits)
         missing: List[str] = []
         for value in expect_numbers:
             value_ok = value in numbers_available
@@ -115,6 +179,32 @@ class TemplateIndex:
                 reason_str = " and ".join(reasons)
                 missing.append(f"{value}_of_{suit} (missing {reason_str})")
         return missing
+
+    def append_template(
+        self,
+        template_set: Optional[str],
+        label: str,
+        img: Image.Image,
+        *,
+        is_number: bool,
+    ) -> None:
+        key = self._normalise_set(template_set)
+        gray = np.array(img.convert("L"))
+        arr = self._prep(gray)
+        store_all = self.numbers_by_set if is_number else self.suits_by_set
+        store = store_all.setdefault(key, {})
+        store.setdefault(label, []).append(arr)
+        if key == self.default_set:
+            if is_number:
+                self.numbers = store
+            else:
+                self.suits = store
+        else:
+            current_keys = { *self.numbers_by_set.keys(), *self.suits_by_set.keys() }
+            if self.default_set not in current_keys:
+                self.default_set = key
+                self.numbers = self.numbers_by_set.get(self.default_set, {})
+                self.suits = self.suits_by_set.get(self.default_set, {})
 
 
 def _to_gray(img):
@@ -194,21 +284,25 @@ def recognize_number_and_suit(
     number_patch: Image.Image,
     suit_patch: Image.Image,
     idx: TemplateIndex,
+    *,
+    template_set: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], float, float]:
     """Retourne (value, suit, score_value, score_suit)."""
 
     g_num = _to_gray(number_patch)
     g_suit = _to_gray(suit_patch)
 
+    numbers, suits = idx.get_templates(template_set)
+
     best_num, best_num_score = None, -1.0
-    for label, tpls in idx.numbers.items():
+    for label, tpls in numbers.items():
         score = match_best(g_num, tpls)
         if score > best_num_score:
             best_num_score = score
             best_num = label
 
     best_suit, best_suit_score = None, -1.0
-    for label, tpls in idx.suits.items():
+    for label, tpls in suits.items():
         score = match_best(g_suit, tpls)
         if score > best_suit_score:
             best_suit_score = score

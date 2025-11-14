@@ -24,6 +24,7 @@ __all__ = [
     "load_coordinates",
     "extract_patch",
     "collect_card_patches",
+    "CardPatch",
 ]
 
 
@@ -200,6 +201,13 @@ def load_coordinates(
     return result
 
 
+@dataclass(frozen=True)
+class CardPatch:
+    number: Image.Image
+    suit: Image.Image
+    template_set: Optional[str] = None
+
+
 def extract_patch(image: Image.Image, top_left: Tuple[int, int], size: Tuple[int, int], pad: int = 4) -> Image.Image:
     """Crop ``image`` around ``top_left``/``size`` with a soft *pad*."""
 
@@ -233,6 +241,17 @@ def _region_geometry(region: Region | Mapping[str, Any]) -> Tuple[Tuple[int, int
     return (tl_x, tl_y), (width, height)
 
 
+def _region_template_set(region: Region | Mapping[str, Any]) -> Optional[str]:
+    if isinstance(region, Region):
+        value = region.meta.get("template_set")
+    else:
+        value = region.get("template_set")
+    if value is None:
+        return None
+    value_str = str(value).strip()
+    return value_str or None
+
+
 def collect_card_patches(
     table_img: Image.Image,
     regions: Mapping[str, Region | Mapping[str, Any]],
@@ -240,8 +259,8 @@ def collect_card_patches(
     pad: int = 4,
     groups_numbers: Tuple[str, ...] = ("player_card_number", "board_card_number"),
     groups_suits: Tuple[str, ...] = ("player_card_symbol", "board_card_symbol"),
-) -> Dict[str, Tuple[Image.Image, Image.Image]]:
-    """Return ``{base_key: (number_patch, suit_patch)}`` for recognised card regions.
+) -> Dict[str, CardPatch]:
+    """Return ``{base_key: CardPatch}`` for recognised card regions.
 
     The implementation walks through *regions* a single time and relies on
     :func:`extract_patch` to perform the actual cropping, keeping the
@@ -249,7 +268,7 @@ def collect_card_patches(
     :class:`Region` objects and plain ``dict`` entries.
     """
 
-    slots: Dict[str, Dict[str, Image.Image]] = {}
+    slots: Dict[str, Dict[str, object]] = {}
 
     for key, region in regions.items():
         group = _region_group(region)
@@ -269,12 +288,28 @@ def collect_card_patches(
 
         top_left, size = _region_geometry(region)
         patch = extract_patch(table_img, top_left, size, pad=pad)
-        slots.setdefault(base_key, {})[slot] = patch
+        entry = slots.setdefault(base_key, {})
+        entry[slot] = patch
+        tpl = _region_template_set(region)
+        if tpl:
+            entry.setdefault("_meta", {})
+            meta = entry["_meta"]
+            if isinstance(meta, dict):
+                meta.setdefault("template_set", tpl)
 
-    out: Dict[str, Tuple[Image.Image, Image.Image]] = {}
+    out: Dict[str, CardPatch] = {}
     for base, mapping in slots.items():
-        if "number" in mapping and "symbol" in mapping:
-            out[base] = (mapping["number"], mapping["symbol"])
+        num = mapping.get("number")
+        suit = mapping.get("symbol")
+        if isinstance(num, Image.Image) and isinstance(suit, Image.Image):
+            tpl_set = None
+            meta = mapping.get("_meta")
+            if isinstance(meta, dict):
+                value = meta.get("template_set")
+                tpl_set = str(value).strip() if value is not None else None
+                if tpl_set == "":
+                    tpl_set = None
+            out[base] = CardPatch(number=num, suit=suit, template_set=tpl_set)
     return out
 
 

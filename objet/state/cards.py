@@ -51,15 +51,29 @@ class CardsState:
 
         if not self.board:
             self.board = [
-                Card(card_coordinates_value=bbox_from_region(regions.get(f"board_card_{i}_number")),
-                      card_coordinates_suit=bbox_from_region(regions.get(f"board_card_{i}_symbol")),)
+                Card(
+                    card_coordinates_value=bbox_from_region(regions.get(f"board_card_{i}_number")),
+                    card_coordinates_suit=bbox_from_region(regions.get(f"board_card_{i}_symbol")),
+                    template_set=_template_set_for_card(
+                        regions,
+                        f"board_card_{i}_number",
+                        f"board_card_{i}_symbol",
+                    ),
+                )
                 for i in range(1, 6)
             ]
 
         if not self.me:
             self.me = [
-                Card(card_coordinates_value=bbox_from_region(regions.get(f"player_card_{i}_number")),
-                      card_coordinates_suit=bbox_from_region(regions.get(f"player_card_{i}_symbol")),)
+                Card(
+                    card_coordinates_value=bbox_from_region(regions.get(f"player_card_{i}_number")),
+                    card_coordinates_suit=bbox_from_region(regions.get(f"player_card_{i}_symbol")),
+                    template_set=_template_set_for_card(
+                        regions,
+                        f"player_card_{i}_number",
+                        f"player_card_{i}_symbol",
+                    ),
+                )
                 for i in range(1, 3)
             ]
 
@@ -86,3 +100,23 @@ if __name__ == "__main__":
     print(cards_state.me[0])
 
 __all__ = ["CardsState"]
+def _template_set_from_region(region: Optional[Region]) -> Optional[str]:
+    if region is None:
+        return None
+    value = region.meta.get("template_set")
+    if value is None:
+        return None
+    value_str = str(value).strip()
+    return value_str or None
+
+
+def _template_set_for_card(
+    regions: Dict[str, Region],
+    number_key: str,
+    symbol_key: str,
+) -> Optional[str]:
+    tpl = _template_set_from_region(regions.get(number_key))
+    if tpl:
+        return tpl
+    return _template_set_from_region(regions.get(symbol_key))
+
