@@ -19,8 +19,8 @@
   "templates": {
     "action_button": {
       "size": [
-        150,
-        90
+        140,
+        70
       ],
       "type": "texte",
       "layout": {
@@ -43,8 +43,8 @@
     },
     "board_card_number": {
       "size": [
-        50,
-        35
+        60,
+        60
       ],
       "type": "carte_numero",
       "layout": {
@@ -53,8 +53,8 @@
     },
     "board_card_symbol": {
       "size": [
-        60,
-        60
+        80,
+        80
       ],
       "type": "carte_symbole",
       "layout": {
@@ -67,8 +67,8 @@
         "lock_same_y": true
       },
       "size": [
-        30,
-        30
+        60,
+        60
       ]
     },
     "player_card_symbol": {
@@ -77,8 +77,8 @@
         "lock_same_y": true
       },
       "size": [
-        50,
-        50
+        80,
+        80
       ]
     }
   },
@@ -86,8 +86,8 @@
     "button_1": {
       "group": "action_button",
       "top_left": [
-        1348,
-        1073
+        1139,
+        1152
       ],
       "value": null,
       "label": "button_1"
@@ -95,8 +95,8 @@
     "button_2": {
       "group": "action_button",
       "top_left": [
-        1533,
-        1073
+        1340,
+        1152
       ],
       "value": null,
       "label": "button_2"
@@ -104,8 +104,8 @@
     "button_3": {
       "group": "action_button",
       "top_left": [
-        1738,
-        1073
+        1582,
+        1152
       ],
       "value": null,
       "label": "button_3"
@@ -113,8 +113,8 @@
     "fond": {
       "group": "player_money",
       "top_left": [
-        589,
-        805
+        834,
+        1126
       ],
       "value": null,
       "label": "fond"
@@ -122,8 +122,8 @@
     "player_money_J1": {
       "group": "player_money",
       "top_left": [
-        238,
-        727
+        125,
+        873
       ],
       "value": null,
       "label": "player_money_J1"
@@ -131,8 +131,8 @@
     "player_money_J2": {
       "group": "player_money",
       "top_left": [
-        237,
-        279
+        193,
+        310
       ],
       "value": null,
       "label": "player_money_J2"
@@ -140,8 +140,8 @@
     "player_money_J3": {
       "group": "player_money",
       "top_left": [
-        584,
-        201
+        909,
+        65
       ],
       "value": null,
       "label": "player_money_J3"
@@ -149,8 +149,8 @@
     "player_money_J4": {
       "group": "player_money",
       "top_left": [
-        939,
-        277
+        1586,
+        392
       ],
       "value": null,
       "label": "player_money_J4"
@@ -158,8 +158,8 @@
     "player_money_J5": {
       "group": "player_money",
       "top_left": [
-        934,
-        728
+        1532,
+        872
       ],
       "value": null,
       "label": "player_money_J5"
@@ -167,8 +167,8 @@
     "player_card_1_number": {
       "group": "player_card_number",
       "top_left": [
-        557,
-        675
+        756,
+        895
       ],
       "value": null,
       "label": "player_card_1_number"
@@ -176,8 +176,8 @@
     "player_card_2_number": {
       "group": "player_card_number",
       "top_left": [
-        642,
-        675
+        890,
+        895
       ],
       "value": null,
       "label": "player_card_2_number"
@@ -185,8 +185,8 @@
     "player_card_1_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        578,
-        721
+        799,
+        984
       ],
       "value": null,
       "label": "player_card_1_symbol"
@@ -194,8 +194,8 @@
     "player_card_2_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        665,
-        721
+        930,
+        984
       ],
       "value": null,
       "label": "player_card_2_symbol"
@@ -203,8 +203,8 @@
     "board_card_1_number": {
       "group": "board_card_number",
       "top_left": [
-        352,
-        390
+        534,
+        475
       ],
       "value": null,
       "label": "board_card_1_number"
@@ -212,8 +212,8 @@
     "board_card_2_number": {
       "group": "board_card_number",
       "top_left": [
-        471,
-        390
+        679,
+        475
       ],
       "value": null,
       "label": "board_card_2_number"
@@ -221,8 +221,8 @@
     "board_card_3_number": {
       "group": "board_card_number",
       "top_left": [
-        588,
-        390
+        822,
+        475
       ],
       "value": null,
       "label": "board_card_3_number"
@@ -230,8 +230,8 @@
     "board_card_4_number": {
       "group": "board_card_number",
       "top_left": [
-        707,
-        390
+        966,
+        475
       ],
       "value": null,
       "label": "board_card_4_number"
@@ -239,8 +239,8 @@
     "board_card_5_number": {
       "group": "board_card_number",
       "top_left": [
-        828,
-        390
+        1111,
+        475
       ],
       "value": null,
       "label": "board_card_5_number"
@@ -248,8 +248,8 @@
     "board_card_1_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        380,
-        452
+        577,
+        564
       ],
       "value": null,
       "label": "board_card_1_symbol"
@@ -257,8 +257,8 @@
     "board_card_2_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        499,
-        452
+        722,
+        564
       ],
       "value": null,
       "label": "board_card_2_symbol"
@@ -266,8 +266,8 @@
     "board_card_3_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        619,
-        452
+        869,
+        564
       ],
       "value": null,
       "label": "board_card_3_symbol"
@@ -275,8 +275,8 @@
     "board_card_4_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        737,
-        452
+        1008,
+        564
       ],
       "value": null,
       "label": "board_card_4_symbol"
@@ -284,8 +284,8 @@
     "board_card_5_symbol": {
       "group": "board_card_symbol",
       "top_left": [
-        853,
-        452
+        1152,
+        564
       ],
       "value": null,
       "label": "board_card_5_symbol"
@@ -293,8 +293,8 @@
     "pot": {
       "group": "other_money",
       "top_left": [
-        618,
-        340
+        906,
+        432
       ],
       "value": null,
       "label": "pot"

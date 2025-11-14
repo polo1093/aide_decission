@@ -1,0 +1,176 @@
+@startuml
+' Machine à états – NLHE, avec nb de cartes visibles dans les noms de states
+'  - 2 priv = mes hole cards
+'  - board = cartes communes
+
+[*] --> Idle
+
+' ========================
+' IDLE / ATTENTE DE MAIN
+' ========================
+state "Idle (0 visibles : 0 priv, 0 board)" as Idle {
+  [*] --> WaitingDeal
+  state WaitingDeal
+  WaitingDeal : En attente d'une nouvelle main
+  WaitingDeal --> Preflop : deal_hole
+}
+
+' ========================
+' PRE-FLOP
+' ========================
+state "Preflop (2 visibles : 2 priv, 0 board)" as Preflop {
+  [*] --> Preflop_Bets
+
+  state Preflop_Bets {
+    [*] --> WaitingTurn_P
+
+    state WaitingTurn_P
+    state Act_P
+    state ObserveOthers_P
+    state RoundClosed_P
+
+    WaitingTurn_P : En attente de mon tour (preflop)
+    WaitingTurn_P --> Act_P : action_my_turn
+    WaitingTurn_P --> ObserveOthers_P : action_others
+
+    ObserveOthers_P : Actions adverses (bet/raise/call/check/fold)
+    ObserveOthers_P --> WaitingTurn_P
+    ObserveOthers_P --> RoundClosed_P : betting_closed
+
+    Act_P : Mon action (check/call/bet/raise/fold)
+    Act_P --> RoundClosed_P : betting_closed
+    Act_P --> WaitingTurn_P : action_others
+    Act_P --> ObserveOthers_P : action_others
+
+    RoundClosed_P : Fin du tour d'enchères preflop
+  }
+
+  Preflop_Bets --> Flop : deal_flop
+  Preflop_Bets --> Folded : fold_me
+}
+
+' ========================
+' FLOP
+' ========================
+state "Flop (5 visibles : 2 priv, 3 board)" as Flop {
+  [*] --> Flop_Bets
+
+  state Flop_Bets {
+    [*] --> WaitingTurn_F
+
+    state WaitingTurn_F
+    state Act_F
+    state ObserveOthers_F
+    state RoundClosed_F
+
+    WaitingTurn_F : En attente de mon tour (flop)
+    WaitingTurn_F --> Act_F : action_my_turn
+    WaitingTurn_F --> ObserveOthers_F : action_others
+
+    ObserveOthers_F : Actions adverses (bet/raise/call/check/fold)
+    ObserveOthers_F --> WaitingTurn_F
+    ObserveOthers_F --> RoundClosed_F : betting_closed
+
+    Act_F : Mon action (check/call/bet/raise/fold)
+    Act_F --> RoundClosed_F : betting_closed
+    Act_F --> WaitingTurn_F : action_others
+    Act_F --> ObserveOthers_F : action_others
+
+    RoundClosed_F : Fin du tour d'enchères flop
+  }
+
+  Flop_Bets --> Turn : deal_turn
+  Flop_Bets --> Folded : fold_me
+}
+
+' ========================
+' TURN
+' ========================
+state "Turn (6 visibles : 2 priv, 4 board)" as Turn {
+  [*] --> Turn_Bets
+
+  state Turn_Bets {
+    [*] --> WaitingTurn_T
+
+    state WaitingTurn_T
+    state Act_T
+    state ObserveOthers_T
+    state RoundClosed_T
+
+    WaitingTurn_T : En attente de mon tour (turn)
+    WaitingTurn_T --> Act_T : action_my_turn
+    WaitingTurn_T --> ObserveOthers_T : action_others
+
+    ObserveOthers_T : Actions adverses (bet/raise/call/check/fold)
+    ObserveOthers_T --> WaitingTurn_T
+    ObserveOthers_T --> RoundClosed_T : betting_closed
+
+    Act_T : Mon action (check/call/bet/raise/fold)
+    Act_T --> RoundClosed_T : betting_closed
+    Act_T --> WaitingTurn_T : action_others
+    Act_T --> ObserveOthers_T : action_others
+
+    RoundClosed_T : Fin du tour d'enchères turn
+  }
+
+  Turn_Bets --> River : deal_river
+  Turn_Bets --> Folded : fold_me
+}
+
+' ========================
+' RIVER
+' ========================
+state "River (7 visibles : 2 priv, 5 board)" as River {
+  [*] --> River_Bets
+
+  state River_Bets {
+    [*] --> WaitingTurn_R
+
+    state WaitingTurn_R
+    state Act_R
+    state ObserveOthers_R
+    state RoundClosed_R
+
+    WaitingTurn_R : En attente de mon tour (river)
+    WaitingTurn_R --> Act_R : action_my_turn
+    WaitingTurn_R --> ObserveOthers_R : action_others
+
+    ObserveOthers_R : Actions adverses (bet/raise/call/check/fold)
+    ObserveOthers_R --> WaitingTurn_R
+    ObserveOthers_R --> RoundClosed_R : betting_closed
+
+    Act_R : Mon action (check/call/bet/raise/fold)
+    Act_R --> RoundClosed_R : betting_closed
+    Act_R --> WaitingTurn_R : action_others
+    Act_R --> ObserveOthers_R : action_others
+
+    RoundClosed_R : Fin du tour d'enchères river
+  }
+
+  River_Bets --> Showdown : betting_closed
+  River_Bets --> Folded   : fold_me
+}
+
+' ========================
+' FIN DE MAIN
+' ========================
+state Showdown
+state Folded
+state HandEnd {
+  [*] --> Award
+  state Award
+  Award : pot_awarded
+} 
+
+' Chaînage principal des streets
+Idle    --> Preflop : deal_hole
+Preflop --> Flop    : deal_flop
+Flop    --> Turn    : deal_turn
+Turn    --> River   : deal_river
+
+' Sorties de main
+Showdown --> HandEnd
+Folded   --> HandEnd
+HandEnd  --> Idle : new_hand
+
+@enduml

@@ -17,8 +17,6 @@ Options utiles:
   --trim          Bordure rognée (px) autour des patches AVANT reco & sauvegarde (def 6)
 """
 
-from __future__ import annotations
-
 import argparse
 import itertools
 import sys
