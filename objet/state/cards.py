@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from objet.entities.card import Card
-from scripts._utils import Region, load_coordinates
+from objet.utils.calibration import Region, load_coordinates
 
 CardBox = Tuple[int, int, int, int]
 
