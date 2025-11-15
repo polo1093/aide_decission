@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog  # plus utilisé pour le save-as, mais on garde l'import
 
 import customtkinter as ctk
 from PIL import ImageTk, Image
@@ -25,14 +25,6 @@ DEFAULT_IMAGE_NAME = "test_crop.png"
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
-
-# Sauvegarde directe sans popup de choix de nom sophistiqué
-def _direct_save_as_filename(**kwargs):
-    initialdir = kwargs.get("initialdir") or os.getcwd()
-    initialfile = kwargs.get("initialfile") or "coordinates.json"
-    return os.path.join(initialdir, initialfile)
-
-filedialog.asksaveasfilename = _direct_save_as_filename
 
 from objet.services.game import Game
 from zone_project import ZoneProject
@@ -50,6 +42,9 @@ class ZoneEditorCTK:
         self.root = ctk.CTk()
         self.root.title(APP_TITLE)
         self.root.geometry("1600x940")
+
+        # Fermeture : aucune sauvegarde automatique
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Modèle
         self.base_dir = os.path.abspath(base_dir or str(DEFAULT_CONFIG_DIR))
@@ -263,7 +258,7 @@ class ZoneEditorCTK:
         W, H = self.project.image_size
         if W == 0 or H == 0:
             return
-        # 100% = 1:1, pas de rescale automatique pour rentrer dans la fenêtre
+        # 100% = 1:1
         self.base_scale = 1.0
         self._update_display_image()
 
@@ -287,7 +282,6 @@ class ZoneEditorCTK:
         self.text_items.clear()
         w = self.tk_img.width() if self.tk_img else MAX_CANVAS_W
         h = self.tk_img.height() if self.tk_img else MAX_CANVAS_H
-        # Pas de max() → le canvas prend la taille réelle de l'image (à l'échelle courante)
         self.canvas.config(width=w, height=h)
         if self.tk_img:
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
@@ -377,7 +371,6 @@ class ZoneEditorCTK:
         elif groups:
             self.group_var.set(groups[0])
 
-        # *** PAS DE VALEUR PAR DÉFAUT ***
         x, y = r["top_left"]
         self.entry_x.delete(0, tk.END)
         self.entry_x.insert(0, str(int(x)))
@@ -397,7 +390,6 @@ class ZoneEditorCTK:
     def _region_at_point(self, x: int, y: int) -> Optional[str]:
         for key, r in self.project.regions.items():
             gw, gh = self.project.get_group_size(r.get("group", ""))
-            # *** PAS DE VALEUR PAR DÉFAUT ***
             px, py = r["top_left"]
             if px <= x <= px + gw and py <= y <= py + gh:
                 return key
@@ -492,22 +484,16 @@ class ZoneEditorCTK:
         self.status.configure(text=f"Modifié: {key}")
 
     def _save_json(self):
-        base = self.base_dir
-        folder = os.path.join(base, self.project.current_game or "")
-        init_dir = folder if os.path.isdir(folder) else os.path.dirname(
-            self.project.image_path or ""
-        )
-        out_path = filedialog.asksaveasfilename(
-            title="Enregistrer",
-            defaultextension=".json",
-            initialdir=init_dir,
-            initialfile="coordinates.json",
-            filetypes=[("JSON", "*.json")],
-        )
-        if not out_path:
-            return
+        """Écrit directement config/<jeu>/coordinates.json, uniquement sur clic bouton."""
+        game = self.project.current_game or DEFAULT_GAME_NAME
+        out_path = os.path.join(self.base_dir, game, "coordinates.json")
         self.project.save_to(out_path)
         self.status.configure(text=f"Sauvegardé: {out_path}")
+
+    # ---------- Fermeture ----------
+    def _on_close(self):
+        """Fermeture sans aucune sauvegarde implicite."""
+        self.root.destroy()
 
     # ---------- Zoom ----------
     def _on_zoom_slider(self, value: float):
