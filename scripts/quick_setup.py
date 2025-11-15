@@ -3,7 +3,7 @@
 
 Ce script enchaîne les étapes manuelles existantes :
   1. Éditer les zones via l'UI CustomTkinter.
-  2. Rogner une vidéo test pour générer des crops.
+  2. Capturer des frames plein écran depuis une vidéo de test.
   3. Identifier/labelliser les cartes manquantes.
   4. Valider la capture complète sur une vidéo.
 
@@ -74,7 +74,7 @@ def _run_zone_editor(game: str, config_root: Path) -> int:
     return 0
 
 
-def _run_crop(game_dir: Path, video: Optional[str], interval: float, out_dir: Optional[Path]) -> int:
+def _run_capture_frames(game_dir: Path, video: Optional[str], interval: float, out_dir: Optional[Path]) -> int:
     from Crop_Video_Frames import main as crop_main
 
     argv: List[str] = ["--game-dir", str(game_dir)]
@@ -87,12 +87,12 @@ def _run_crop(game_dir: Path, video: Optional[str], interval: float, out_dir: Op
     return int(crop_main(argv))
 
 
-def _run_identify(game: str, crops_dir: Optional[Path], threshold: float, strict: float, trim: int, force_all: bool) -> int:
+def _run_identify(game: str, screens_dir: Optional[Path], threshold: float, strict: float, trim: int, force_all: bool) -> int:
     from identify_card import main as identify_main
 
     argv: List[str] = ["--game", game, "--threshold", str(threshold), "--strict", str(strict), "--trim", str(trim)]
-    if crops_dir is not None:
-        argv += ["--crops-dir", str(crops_dir)]
+    if screens_dir is not None:
+        argv += ["--screens-dir", str(screens_dir)]
     if force_all:
         argv.append("--force-all")
     return int(identify_main(argv))
@@ -143,12 +143,12 @@ def _run_capture_video(
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Assistant de configuration rapide (zones → crops → cartes → capture)")
+    parser = argparse.ArgumentParser(description="Assistant de configuration rapide (zones → captures → cartes → validation)")
     parser.add_argument("--game", default="PMU", help="Nom du jeu (dossier dans config/)")
     parser.add_argument("--config-root", help="Chemin vers le dossier config/ (défaut: auto)")
     parser.add_argument("--video", help="Vidéo utilisée pour le crop et la validation")
-    parser.add_argument("--crops-dir", help="Dossier de sortie des crops (défaut: config/<game>/debug/crops)")
-    parser.add_argument("--crop-interval", type=float, default=3.0, help="Intervalle (s) entre deux crops vidéo")
+    parser.add_argument("--screens-dir", help="Dossier de sortie des captures (défaut: config/<game>/debug/screens)")
+    parser.add_argument("--capture-interval", type=float, default=3.0, help="Intervalle (s) entre deux captures vidéo")
     parser.add_argument("--identify-threshold", type=float, default=0.92, help="Seuil reco acceptée")
     parser.add_argument("--identify-strict", type=float, default=0.985, help="Seuil autoskip strict")
     parser.add_argument("--identify-trim", type=int, default=6, help="Rognage autour des patches (px)")
@@ -158,9 +158,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--capture-suit-th", type=float, default=0.65, help="Seuil reconnaissance des couleurs")
     parser.add_argument("--capture-require-k", type=int, default=2, help="Frames nécessaires pour stabiliser")
     parser.add_argument("--skip-zone-editor", action="store_true", help="Sauter l'étape d'édition des zones")
-    parser.add_argument("--skip-crop", action="store_true", help="Sauter l'étape de crop vidéo")
+    parser.add_argument("--skip-capture", action="store_true", help="Sauter l'étape de captures vidéo")
     parser.add_argument("--skip-identify", action="store_true", help="Sauter l'étape d'identification des cartes")
-    parser.add_argument("--skip-capture", action="store_true", help="Sauter la validation capture")
+    parser.add_argument("--skip-capture-validation", action="store_true", help="Sauter la validation capture")
     parser.add_argument("--continue-on-error", action="store_true", help="Continuer même si une étape échoue")
     return parser.parse_args(argv)
 
@@ -174,29 +174,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ERREUR: dossier du jeu introuvable ({game_dir})")
         return 2
 
-    crops_dir = Path(args.crops_dir).resolve() if args.crops_dir else (game_dir / "debug" / "crops")
+    screens_dir = Path(args.screens_dir).resolve() if args.screens_dir else (game_dir / "debug" / "screens")
 
     steps: List[Tuple[str, Callable[[], int]]] = []
     if not args.skip_zone_editor:
         steps.append(("Édition des zones", lambda: _run_zone_editor(args.game, config_root)))
-    if not args.skip_crop:
+    if not args.skip_capture:
         steps.append((
-            "Crop vidéo",
-            lambda: _run_crop(game_dir, args.video, float(args.crop_interval), crops_dir),
+            "Captures vidéo",
+            lambda: _run_capture_frames(
+                game_dir,
+                args.video,
+                float(args.capture_interval),
+                screens_dir,
+            ),
         ))
     if not args.skip_identify:
         steps.append((
             "Identification des cartes",
             lambda: _run_identify(
                 args.game,
-                crops_dir,
+                screens_dir,
                 float(args.identify_threshold),
                 float(args.identify_strict),
                 int(args.identify_trim),
                 bool(args.identify_force_all),
             ),
         ))
-    if not args.skip_capture:
+    if not args.skip_capture_validation:
         if args.video:
             steps.append((
                 "Validation capture vidéo",

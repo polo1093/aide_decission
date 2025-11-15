@@ -101,21 +101,47 @@ python launch.py --profile demo                 # Exemple d’exécution
 
 Toutes les positions à l'écran sont définies dans le fichier `coordinates.json` à la racine du projet. Chaque région expose désormais directement la position absolue de son coin haut-gauche via `top_left` (en pixels écran) et s'appuie sur un gabarit (`templates`) pour déterminer sa taille. Mettez à jour ces coordonnées pour adapter le bot à une nouvelle résolution ou interface, puis relancez le programme pour appliquer les changements.
 
+## Calibration absolue et point de référence
+
+Toutes les captures sont désormais traitées en coordonnées **absolues**. Les
+scripts recherchent automatiquement le point de référence défini par
+`anchor.png` (ou `anchor.jpg`) afin de compenser un éventuel décalage de la
+table sur l'écran. Ce mécanisme permet de travailler indifféremment avec des
+captures plein écran ou des extraits cadrés sur la table :
+
+- `table_capture.bounds` décrit les bornes absolues de la table et est calculé
+  automatiquement si absent du JSON.
+- `table_capture.ref_offset` indique la position attendue de l'ancre à l'intérieur
+  de la table. Les scripts s'en servent pour corriger l'origine lorsque
+  l'ancre est détectée.
+
 ## Capture de nouvelles cartes
 
-Le script `scripts/capture_cards.py` aide à constituer un jeu d'images pour l'OCR.
-Spécifiez les noms de régions définis dans `coordinates.json` ou des coordonnées
-absolues pour découper la valeur et le symbole d'une carte :
+1. **Extraire des captures plein écran** depuis une vidéo de calibration :
 
-```bash
-python scripts/capture_cards.py 
-    --number player_card_1_number 
-    --ref 1000,200
-```
+    ```bash
+    python scripts/Crop_Video_Frames.py \
+        --game-dir config/PMU \
+        --video debug/cards_video/cards_video.mp4 \
+        --out config/PMU/debug/screens
+    ```
 
-Si le test automatique détecte au moins dix pixels blancs en bas à droite, le
-programme demande la valeur et la couleur de la carte. Les images sont alors
-enregistrées dans `screen/debug/Carte/<valeur>/` et `screen/symbole/<couleur>/`.
+    Les images sont enregistrées dans `config/<game>/debug/screens` et servent
+    de base aux étapes suivantes.
+
+2. **Identifier les cartes manquantes** avec `identify_card.py` :
+
+    ```bash
+    python scripts/identify_card.py --game PMU --screens-dir config/PMU/debug/screens
+    ```
+
+    Le script applique automatiquement la correspondance sur l'ancre pour
+    extraire chaque patch (valeur et symbole) avant de proposer une
+    labellisation assistée.
+
+3. **Valider la détection** à l'aide de `capture_cards.py` ou via
+   `quick_setup.py`, qui enchaîne édition des zones, captures vidéo, matching
+   et validation dynamique.
 
 ## Copier les sources Python
 

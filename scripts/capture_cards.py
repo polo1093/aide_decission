@@ -31,8 +31,13 @@ for root in (PROJECT_ROOT, SCRIPTS_ROOT):
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-from _utils import CardPatch, collect_card_patches, load_coordinates
-from crop_core import crop_from_size_and_offset
+from _utils import (
+    CardPatch,
+    collect_card_patches,
+    coerce_int,
+    load_coordinates,
+    table_capture_origin,
+)
 from objet.scanner.cards_recognition import (
     CardObservation,
     TemplateIndex,
@@ -68,7 +73,11 @@ def _find_first(game_dir: Path, base: str, exts=(".png", ".jpg", ".jpeg")) -> Op
 
 def _auto_paths_for_game(game: str, game_dir_opt: Optional[str]) -> dict:
     game_dir = Path(game_dir_opt) if game_dir_opt else Path("config") / (game or "PMU")
-    table = _find_first(game_dir, "test_crop_result")
+    table = None
+    for stem in ("test_screen", "test_fullscreen", "test_table", "test_crop_result"):
+        table = _find_first(game_dir, stem)
+        if table:
+            break
     coords = game_dir / "coordinates.json"
     cards_root = game_dir / "cards"
     return {"game_dir": game_dir, "table": table, "coords": coords, "cards_root": cards_root}
@@ -81,10 +90,58 @@ def _save_png(p: Path, img: Image.Image) -> None:
     img.save(p)
 
 
+def _expected_anchor_from_capture(
+    table_capture: Dict[str, object],
+    ref_img: Optional[Image.Image],
+) -> Optional[Tuple[int, int]]:
+    if not ref_img:
+        return None
+    if not isinstance(table_capture, dict):
+        return None
+    origin = table_capture_origin(table_capture)
+    offset_raw = table_capture.get("ref_offset")
+    if isinstance(offset_raw, Iterable):
+        values = list(offset_raw)
+    else:
+        values = []
+    if len(values) >= 2:
+        ox = origin[0] + coerce_int(values[0])
+        oy = origin[1] + coerce_int(values[1])
+        return ox, oy
+    if origin != (0, 0):
+        return origin
+    return None
+
+
+def _match_anchor(frame: Image.Image, anchor: Image.Image) -> Tuple[Tuple[int, int], float]:
+    frame_gray = cv2.cvtColor(np.array(frame.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    anchor_gray = cv2.cvtColor(np.array(anchor.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    result = cv2.matchTemplate(frame_gray, anchor_gray, cv2.TM_CCOEFF_NORMED)
+    _, score, _, loc = cv2.minMaxLoc(result)
+    return (int(loc[0]), int(loc[1])), float(score)
+
+
+def _compute_anchor_offset(
+    frame: Image.Image,
+    anchor: Optional[Image.Image],
+    expected: Optional[Tuple[int, int]],
+    *,
+    threshold: float = 0.8,
+) -> Tuple[Tuple[int, int], Optional[float]]:
+    if anchor is None or expected is None:
+        return (0, 0), None
+    (ax, ay), score = _match_anchor(frame, anchor)
+    if score < threshold:
+        return (0, 0), score
+    dx = ax - expected[0]
+    dy = ay - expected[1]
+    return (dx, dy), score
+
+
 def main_cards_validate(argv: Optional[list] = None) -> int:
     """Vérifie l'extraction + matching des cartes pour un jeu donné.
 
-    Utilise un screenshot déjà croppé (test_crop_result.* dans config/<game>/).
+    Utilise une capture plein écran (ex: test_screen.* dans config/<game>/).
     """
 
     parser = argparse.ArgumentParser(description="Vérifie l'extraction + matching des cartes pour un jeu")
@@ -102,7 +159,7 @@ def main_cards_validate(argv: Optional[list] = None) -> int:
     cards_root: Path = auto["cards_root"]
 
     if not table_path or not table_path.exists():
-        raise SystemExit("ERROR: test_crop_result not found")
+        raise SystemExit("ERROR: aucune capture plein écran trouvée (utilisez --table ou placez test_screen.* dans le dossier du jeu)")
     if not coords_path.exists():
         raise SystemExit("ERROR: coordinates.json not found")
     if not cards_root.exists():
@@ -142,8 +199,26 @@ def main_cards_validate(argv: Optional[list] = None) -> int:
         reference_path=str(table_path) if table_path else None,
     )
 
+    anchor_path = _find_first(auto["game_dir"], "anchor")
+    anchor_img = Image.open(anchor_path).convert("RGBA") if anchor_path else None
+    anchor_expected = _expected_anchor_from_capture(table_capture, anchor_img)
+    offset, score = _compute_anchor_offset(
+        table_img,
+        anchor_img,
+        anchor_expected,
+        threshold=0.75,
+    )
+    if score is not None:
+        print(f"Anchor match score: {score:.3f} (offset={offset})")
+
     # 3) Extraire patches cartes
-    pairs = collect_card_patches(table_img, regions, pad=int(args.pad))
+    pairs = collect_card_patches(
+        table_img,
+        regions,
+        pad=int(args.pad),
+        table_capture=table_capture,
+        offset=offset,
+    )
     if not pairs:
         print("No card regions found (check coordinates.json groups)")
         return 2
@@ -262,7 +337,7 @@ class TableState:
 
 
 class TableController:
-    """Orchestrateur runtime (capture → crop → extract → match → état)."""
+    """Orchestrateur runtime (capture → extraction → matching → état)."""
 
     def __init__(self, game_dir: Path, game_state: Optional["Game"] = None) -> None:
         # Import local pour éviter les imports circulaires si objet.services.game
@@ -276,6 +351,7 @@ class TableController:
         self.game: Game = game_state or Game.for_script(Path(__file__).name)
 
         self.regions, self.templates, table_capture = load_coordinates(self.coords_path)
+        self.table_capture = dict(table_capture)
         self.game.update_from_capture(
             table_capture=table_capture,
             regions={k: {"group": r.group, "top_left": r.top_left, "size": r.size} for k, r in self.regions.items()},
@@ -283,12 +359,13 @@ class TableController:
             reference_path=str(self.ref_path) if self.ref_path else None,
         )
 
-        self.size, self.ref_offset = self._load_capture_params()
-
-        # runtime caches
         self.ref_img: Optional[Image.Image] = (
             Image.open(self.ref_path).convert("RGBA") if self.ref_path else None
         )
+        self.anchor_expected = _expected_anchor_from_capture(self.table_capture, self.ref_img)
+        self.anchor_threshold = 0.8
+        self.last_offset: Tuple[int, int] = (0, 0)
+
         self.idx = TemplateIndex(self.game_dir / "cards")
         self.idx.load()
         self.state = TableState()
@@ -299,12 +376,6 @@ class TableController:
             if p.exists():
                 return p
         return None
-
-    def _load_capture_params(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-        tc = self.game.table.captures.table_capture
-        size = tc.get("size", [0, 0]) if isinstance(tc, dict) else [0, 0]
-        ref_offset = tc.get("ref_offset", [0, 0]) if isinstance(tc, dict) else [0, 0]
-        return (int(size[0]), int(size[1])), (int(ref_offset[0]), int(ref_offset[1]))
 
     def process_frame(
         self,
@@ -317,13 +388,25 @@ class TableController:
     ) -> Dict[str, Dict[str, object]]:
         """Traite un frame et retourne un snapshot d'état de table."""
 
-        # 1) crop table via size + ref_offset
-        crop, _ = crop_from_size_and_offset(
-            frame_rgba, self.size, self.ref_offset, reference_img=self.ref_img
+        offset, score = _compute_anchor_offset(
+            frame_rgba,
+            self.ref_img,
+            self.anchor_expected,
+            threshold=self.anchor_threshold,
         )
+        self.last_offset = offset
+        if score is not None and score < self.anchor_threshold:
+            print(
+                f"[WARN] Référence carte: score {score:.3f} < {self.anchor_threshold:.2f}; utilisation des coordonnées nominales"
+            )
 
-        # 2) extractions number/symbol
-        pairs = collect_card_patches(crop, self.regions, pad=4)
+        pairs = collect_card_patches(
+            frame_rgba,
+            self.regions,
+            pad=4,
+            table_capture=self.table_capture,
+            offset=offset,
+        )
 
         # 3) matching + mise à jour d'état
         for base_key, card_patch in pairs.items():
@@ -455,7 +538,7 @@ class InteractiveLabeler:
 
 def main_video_validate(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Valide détection cartes sur une vidéo (crop+match+mémoire)"
+        description="Valide détection cartes sur une vidéo (extraction+match+mémoire)"
     )
     parser.add_argument("--game", default="PMU")
     parser.add_argument("--game-dir")
@@ -483,8 +566,13 @@ def main_video_validate(argv: Optional[list] = None) -> int:
         )
 
         # stocker les inconnus (option basique: si zone présente mais non stable)
-        crop, _ = crop_from_size_and_offset(frame, ctrl.size, ctrl.ref_offset, reference_img=ctrl.ref_img)
-        pairs = collect_card_patches(crop, ctrl.regions, pad=4)
+        pairs = collect_card_patches(
+            frame,
+            ctrl.regions,
+            pad=4,
+            table_capture=ctrl.table_capture,
+            offset=ctrl.last_offset,
+        )
         for base_key, card_patch in pairs.items():
             patch_num = card_patch.number
             patch_suit = card_patch.suit
