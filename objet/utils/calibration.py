@@ -142,8 +142,26 @@ def resolve_templates(templates: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]
 def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping[str, Dict[str, Any]]) -> Region:
     group = str(raw.get("group", ""))
     top_left = raw.get("top_left", [0, 0])
-    size = templates.get(group, {}).get("size", [0, 0])
-    meta = {k: v for k, v in raw.items() if k not in {"group", "top_left"}}
+    tpl_size = templates.get(group, {}).get("size")
+    if isinstance(tpl_size, Iterable):
+        tpl_vals = list(tpl_size)
+    else:
+        tpl_vals = []
+    raw_size = raw.get("size")
+    size_source: Iterable[Any]
+    if tpl_vals:
+        size_source = tpl_vals
+    elif isinstance(raw_size, Iterable):
+        size_source = raw_size
+    else:
+        size_source = []
+    size = [0, 0]
+    size_list = list(size_source)
+    if size_list:
+        size[0] = coerce_int(size_list[0])
+    if len(size_list) >= 2:
+        size[1] = coerce_int(size_list[1])
+    meta = {k: v for k, v in raw.items() if k not in {"group", "top_left", "size"}}
     return Region(
         key=key,
         group=group,
@@ -194,7 +212,31 @@ def load_coordinates(
         r_key: _normalise_region_entry(r_key, raw, resolved)
         for r_key, raw in raw_regions.items()
     }
-    table_capture = payload.get("table_capture", {})
+    table_capture: Dict[str, Any]
+    tc_raw = payload.get("table_capture")
+    if isinstance(tc_raw, Mapping):
+        table_capture = dict(tc_raw)
+    else:
+        table_capture = {}
+    if "enabled" not in table_capture:
+        table_capture["enabled"] = bool(table_capture)
+
+    # Déduire les bornes absolues si absentes du JSON.
+    if "bounds" not in table_capture:
+        if regions:
+            min_x = min(region.top_left[0] for region in regions.values())
+            min_y = min(region.top_left[1] for region in regions.values())
+            max_x = max(region.top_left[0] + region.size[0] for region in regions.values())
+            max_y = max(region.top_left[1] + region.size[1] for region in regions.values())
+            table_capture["bounds"] = [min_x, min_y, max_x, max_y]
+        else:
+            table_capture["bounds"] = [0, 0, 0, 0]
+
+    bounds = table_capture.get("bounds")
+    if isinstance(bounds, (list, tuple)) and len(bounds) == 4:
+        x1, y1, x2, y2 = (coerce_int(bounds[0]), coerce_int(bounds[1]), coerce_int(bounds[2]), coerce_int(bounds[3]))
+        table_capture.setdefault("origin", [x1, y1])
+        table_capture.setdefault("size", [max(0, x2 - x1), max(0, y2 - y1)])
 
     result: _CoordinatesCacheEntry = (regions, resolved, table_capture)
     _COORDINATES_CACHE[key] = result
@@ -317,10 +359,12 @@ def collect_card_patches(
 
 BBox = Tuple[int, int, int, int]  # (x, y, w, h)
 
-def bbox_from_region(region: Optional["Region"]) -> Optional[BBox]:
- 
-    x, y = region.top_left  
-    size = region.size
 
-    w, h = size
+def bbox_from_region(region: Optional["Region"]) -> Optional[BBox]:
+    if region is None:
+        return None
+    x, y = map(int, region.top_left)
+    w, h = map(int, region.size)
+    if w <= 0 or h <= 0:
+        return None
     return x, y, w, h

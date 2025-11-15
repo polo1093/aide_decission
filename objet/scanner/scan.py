@@ -16,6 +16,7 @@ from objet.utils.pyauto import locate_in_image
 from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
 
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
+DEFAULT_ANCHOR_PATH = Path("config/PMU/anchor.png")
 DEFAULT_CARDS_ROOT = Path("config/PMU/Cards")
 
 
@@ -31,7 +32,7 @@ class ScanTable:
         self.coord_path = DEFAULT_COORD_PATH
 
         # Gabarit de référence (ancre) utilisé par pyautogui/locate
-        self.reference_pil: Image.Image = Image.open("config/PMU/me.png").convert("RGB")
+        self.reference_pil: Image.Image = Image.open(DEFAULT_ANCHOR_PATH).convert("RGB")
 
         # --- État runtime ---
         self.screen_array: Optional[np.ndarray] = None     # plein écran, BGR

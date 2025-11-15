@@ -271,7 +271,7 @@ class TableController:
 
         self.game_dir = Path(game_dir)
         self.coords_path = self.game_dir / "coordinates.json"
-        self.ref_path = self._first_of("me", (".png", ".jpg", ".jpeg"))
+        self.ref_path = self._first_of("anchor", (".png", ".jpg", ".jpeg"))
 
         self.game: Game = game_state or Game.for_script(Path(__file__).name)
 
