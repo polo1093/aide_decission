@@ -216,27 +216,33 @@ def load_coordinates(
     tc_raw = payload.get("table_capture")
     if isinstance(tc_raw, Mapping):
         table_capture = dict(tc_raw)
+
+        if "enabled" not in table_capture:
+            table_capture["enabled"] = bool(table_capture)
+
+        # Déduire les bornes absolues si absentes du JSON.
+        if "bounds" not in table_capture:
+            if regions:
+                min_x = min(region.top_left[0] for region in regions.values())
+                min_y = min(region.top_left[1] for region in regions.values())
+                max_x = max(region.top_left[0] + region.size[0] for region in regions.values())
+                max_y = max(region.top_left[1] + region.size[1] for region in regions.values())
+                table_capture["bounds"] = [min_x, min_y, max_x, max_y]
+            else:
+                table_capture["bounds"] = [0, 0, 0, 0]
+
+        bounds = table_capture.get("bounds")
+        if isinstance(bounds, (list, tuple)) and len(bounds) == 4:
+            x1, y1, x2, y2 = (
+                coerce_int(bounds[0]),
+                coerce_int(bounds[1]),
+                coerce_int(bounds[2]),
+                coerce_int(bounds[3]),
+            )
+            table_capture.setdefault("origin", [x1, y1])
+            table_capture.setdefault("size", [max(0, x2 - x1), max(0, y2 - y1)])
     else:
         table_capture = {}
-    if "enabled" not in table_capture:
-        table_capture["enabled"] = bool(table_capture)
-
-    # Déduire les bornes absolues si absentes du JSON.
-    if "bounds" not in table_capture:
-        if regions:
-            min_x = min(region.top_left[0] for region in regions.values())
-            min_y = min(region.top_left[1] for region in regions.values())
-            max_x = max(region.top_left[0] + region.size[0] for region in regions.values())
-            max_y = max(region.top_left[1] + region.size[1] for region in regions.values())
-            table_capture["bounds"] = [min_x, min_y, max_x, max_y]
-        else:
-            table_capture["bounds"] = [0, 0, 0, 0]
-
-    bounds = table_capture.get("bounds")
-    if isinstance(bounds, (list, tuple)) and len(bounds) == 4:
-        x1, y1, x2, y2 = (coerce_int(bounds[0]), coerce_int(bounds[1]), coerce_int(bounds[2]), coerce_int(bounds[3]))
-        table_capture.setdefault("origin", [x1, y1])
-        table_capture.setdefault("size", [max(0, x2 - x1), max(0, y2 - y1)])
 
     result: _CoordinatesCacheEntry = (regions, resolved, table_capture)
     _COORDINATES_CACHE[key] = result

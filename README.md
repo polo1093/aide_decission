@@ -106,14 +106,11 @@ Toutes les positions à l'écran sont définies dans le fichier `coordinates.jso
 Toutes les captures sont désormais traitées en coordonnées **absolues**. Les
 scripts recherchent automatiquement le point de référence défini par
 `anchor.png` (ou `anchor.jpg`) afin de compenser un éventuel décalage de la
-table sur l'écran. Ce mécanisme permet de travailler indifféremment avec des
-captures plein écran ou des extraits cadrés sur la table :
-
-- `table_capture.bounds` décrit les bornes absolues de la table et est calculé
-  automatiquement si absent du JSON.
-- `table_capture.ref_offset` indique la position attendue de l'ancre à l'intérieur
-  de la table. Les scripts s'en servent pour corriger l'origine lorsque
-  l'ancre est détectée.
+table sur l'écran. L'ancien bloc `table_capture` a été retiré des fichiers
+`coordinates.json` : toutes les zones sont donc exprimées directement en
+coordonnées écran, l'origine restant `(0, 0)`. Lorsque le point d'ancrage est
+détecté, les scripts appliquent toujours la même logique de correction pour
+compenser un décalage éventuel.
 
 ## Capture de nouvelles cartes
 
@@ -161,8 +158,8 @@ Les scripts de calibration (`capture_cards.py`, `identify_card.py`, `position_zo
 `zone_project.py`) s'appuient désormais sur un module commun `scripts/_utils.py`.
 Ce module centralise :
 
-- le chargement de `coordinates.json` (résolution des `templates`, accès à
-  `table_capture`, conversion robuste des entiers) ;
+- le chargement de `coordinates.json` (résolution des `templates`, conversion
+  robuste des entiers) ;
 - les fonctions de clamp et d'extraction d'images utilisées par les différents
   CLI/UI.
 

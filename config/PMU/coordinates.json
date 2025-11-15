@@ -1,25 +1,4 @@
 {
-  "table_capture": {
-    "enabled": true,
-    "bounds": [
-      0,
-      0,
-      281,
-      69
-    ],
-    "origin": [
-      0,
-      0
-    ],
-    "size": [
-      1915,
-      1173
-    ],
-    "ref_offset": [
-      1173,
-      875
-    ]
-  },
   "templates": {
     "action_button": {
       "size": [
