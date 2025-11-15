@@ -11,6 +11,7 @@ from objet.utils.calibration import (
     collect_card_patches,
     load_coordinates,
     resolve_templates,
+    table_capture_origin,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "load_coordinates",
     "extract_patch",
     "collect_card_patches",
+    "table_capture_origin",
 ]

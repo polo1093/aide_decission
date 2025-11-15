@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """identify_card.py — assistant de labellisation des cartes.
 
-Parcourt les crops de tables dans ``config/<jeu>/debug/crops``, extrait les
+Parcourt les captures plein écran dans ``config/<jeu>/debug/screens``, extrait les
 patches *number* et *suit* selon `coordinates.json`, tente une reco par gabarits,
 **auto-skip** des cartes déjà connues (log) avec un seuil strict, et **ne demande
 que la partie inconnue** (valeur OU couleur) lorsque l’autre est déjà fiable.
@@ -10,7 +10,7 @@ Usage minimal:
     python scripts/identify_card.py --game PMU
 
 Options utiles:
-  --crops-dir     Dossier d’entrée (défaut: config/<game>/debug/crops)
+  --screens-dir   Dossier d’entrée (défaut: config/<game>/debug/screens)
   --threshold     Score min (0-1) pour considérer une reco comme fiable (def 0.92)
   --strict        Score min (0-1) pour auto-skip sans UI (def 0.985)
   --force-all     Forcer l’UI même si auto-skip serait possible
@@ -45,6 +45,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import customtkinter as ctk
+import numpy as np
 from PIL import Image, ImageTk
 
 from objet.scanner.cards_recognition import (
@@ -53,7 +54,13 @@ from objet.scanner.cards_recognition import (
     is_card_present,
     recognize_number_and_suit,
 )
-from _utils import CardPatch, collect_card_patches, load_coordinates
+from _utils import (
+    CardPatch,
+    collect_card_patches,
+    coerce_int,
+    load_coordinates,
+    table_capture_origin,
+)
 
 DEFAULT_NUMBERS: Sequence[str] = (
     "?",
@@ -98,6 +105,62 @@ def _iter_capture_files(directory: Path) -> Iterable[Path]:
         yield from sorted(directory.glob(ext))
 
 
+def _find_anchor(game_dir: Path) -> Optional[Path]:
+    for ext in (".png", ".jpg", ".jpeg"):
+        candidate = game_dir / f"anchor{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _expected_anchor_from_capture(
+    table_capture: Dict[str, object],
+    ref_img: Optional[Image.Image],
+) -> Optional[Tuple[int, int]]:
+    if not ref_img:
+        return None
+    if not isinstance(table_capture, dict):
+        return None
+    origin = table_capture_origin(table_capture)
+    offset_raw = table_capture.get("ref_offset")
+    if isinstance(offset_raw, Iterable):
+        values = list(offset_raw)
+    else:
+        values = []
+    if len(values) >= 2:
+        ox = origin[0] + coerce_int(values[0])
+        oy = origin[1] + coerce_int(values[1])
+        return ox, oy
+    if origin != (0, 0):
+        return origin
+    return None
+
+
+def _match_anchor(frame: Image.Image, anchor: Image.Image) -> Tuple[Tuple[int, int], float]:
+    frame_gray = cv2.cvtColor(np.array(frame.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    anchor_gray = cv2.cvtColor(np.array(anchor.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    result = cv2.matchTemplate(frame_gray, anchor_gray, cv2.TM_CCOEFF_NORMED)
+    _, score, _, loc = cv2.minMaxLoc(result)
+    return (int(loc[0]), int(loc[1])), float(score)
+
+
+def _compute_anchor_offset(
+    frame: Image.Image,
+    anchor: Optional[Image.Image],
+    expected: Optional[Tuple[int, int]],
+    *,
+    threshold: float = 0.75,
+) -> Tuple[Tuple[int, int], Optional[float]]:
+    if anchor is None or expected is None:
+        return (0, 0), None
+    (ax, ay), score = _match_anchor(frame, anchor)
+    if score < threshold:
+        return (0, 0), score
+    dx = ax - expected[0]
+    dy = ay - expected[1]
+    return (dx, dy), score
+
+
 def _unique_sorted(values: Iterable[str], defaults: Sequence[str]) -> List[str]:
     seen = list(defaults)
     for val in values:
@@ -109,8 +172,10 @@ def _unique_sorted(values: Iterable[str], defaults: Sequence[str]) -> List[str]:
 def collect_card_samples(
     table_paths: Iterable[Path],
     regions: Dict[str, object],
+    table_capture: Dict[str, object],
     idx: TemplateIndex,
     *,
+    anchor_img: Optional[Image.Image] = None,
     trim_border: int,
     accept_threshold: float,
     strict_threshold: float,
@@ -118,6 +183,7 @@ def collect_card_samples(
 ) -> Tuple[List[CardSample], int, int]:
     """Retourne (samples, total_cartes, reconnues_auto).
 
+    - Les coordonnées sont interprétées en absolu grâce à ``table_capture``.
     - Calcul des scores via `recognize_number_and_suit` sur **patches rognés** (trim_border).
     - Si score >= strict_threshold pour number/suit, on considère la partie **connue** sans UI.
     - Si les 2 parties sont connues et `force_all` False → auto-skip + log.
@@ -126,6 +192,7 @@ def collect_card_samples(
     samples: List[CardSample] = []
     total_cards = 0
     auto_ok = 0
+    anchor_expected = _expected_anchor_from_capture(table_capture, anchor_img)
 
     for img_path in table_paths:
         try:
@@ -134,7 +201,23 @@ def collect_card_samples(
         except FileNotFoundError:
             continue
 
-        card_pairs = collect_card_patches(table_img, regions, pad=0)
+        offset, score = _compute_anchor_offset(
+            table_img,
+            anchor_img,
+            anchor_expected,
+            threshold=0.75,
+        )
+        if score is not None and score < 0.75:
+            print(f"[WARN] Anchor score {score:.3f} trop faible pour {img_path.name}; offset ignoré")
+            offset = (0, 0)
+
+        card_pairs = collect_card_patches(
+            table_img,
+            regions,
+            pad=0,
+            table_capture=table_capture,
+            offset=offset,
+        )
         for base_key, card_patch in card_pairs.items():
             num_patch = card_patch.number
             suit_patch = card_patch.suit
@@ -445,7 +528,12 @@ def _make_preview(num_img: Image.Image, suit_img: Image.Image) -> Image.Image:
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Interface de labellisation des cartes")
     parser.add_argument("--game", default="PMU", help="Identifiant du jeu (dossier dans config/)")
-    parser.add_argument("--crops-dir", help="Dossier contenant les captures à analyser")
+    parser.add_argument(
+        "--screens-dir",
+        "--crops-dir",
+        dest="screens_dir",
+        help="Dossier contenant les captures plein écran à analyser",
+    )
     parser.add_argument("--threshold", type=float, default=0.92, help="Score min (0-1) pour accepter une reco auto")
     parser.add_argument("--strict", type=float, default=0.985, help="Score min (0-1) pour autoskip sans UI")
     parser.add_argument("--trim", type=int, default=6, help="Bordure rognée avant sauvegarde (px)")
@@ -461,25 +549,30 @@ def main(argv: Sequence[str]) -> int:
         print(f"ERREUR: fichier de coordonnées introuvable ({coords_path})")
         return 2
 
-    crops_dir = Path(args.crops_dir) if args.crops_dir else game_dir / "debug" / "crops"
-    if not crops_dir.exists():
-        print(f"ERREUR: dossier de captures introuvable ({crops_dir})")
+    screens_dir = Path(args.screens_dir) if args.screens_dir else game_dir / "debug" / "screens"
+    if not screens_dir.exists():
+        print(f"ERREUR: dossier de captures introuvable ({screens_dir})")
         return 2
 
-    regions, _, _ = load_coordinates(coords_path)
+    regions, _, table_capture = load_coordinates(coords_path)
     cards_root = game_dir / "cards"
     idx = TemplateIndex(cards_root)
     idx.load()
 
-    crop_paths = list(_iter_capture_files(crops_dir))
-    if not crop_paths:
-        print(f"Aucune capture trouvée dans {crops_dir}")
+    anchor_path = _find_anchor(game_dir)
+    anchor_img = Image.open(anchor_path).convert("RGBA") if anchor_path else None
+
+    capture_paths = list(_iter_capture_files(screens_dir))
+    if not capture_paths:
+        print(f"Aucune capture trouvée dans {screens_dir}")
         return 0
 
     samples, total_cards, auto_ok = collect_card_samples(
-        crop_paths,
+        capture_paths,
         regions,
+        table_capture,
         idx,
+        anchor_img=anchor_img,
         trim_border=int(args.trim),
         accept_threshold=float(args.threshold),
         strict_threshold=float(args.strict),
