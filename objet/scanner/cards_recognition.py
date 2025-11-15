@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -12,9 +12,12 @@ from PIL import Image
 __all__ = [
     "CardObservation",
     "TemplateIndex",
+    "contains_hold_text",
     "is_card_present",
     "match_best",
+    "recognize_card_observation",
     "recognize_number_and_suit",
+    "trim_card_patch",
 ]
 
 ROOT_TEMPLATE_SET = "__root__"
@@ -241,6 +244,40 @@ def _to_gray(img):
     raise ValueError(f"Type d'image non supporté pour _to_gray: {type(img)}")
 
 
+def trim_card_patch(img: Image.Image | np.ndarray, border: int) -> Image.Image:
+    """Retourne une version rognée du patch (toujours en PIL.Image)."""
+
+    if border <= 0:
+        if isinstance(img, Image.Image):
+            return img
+        if isinstance(img, np.ndarray):
+            if img.ndim == 2:
+                return Image.fromarray(img)
+            return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        return Image.fromarray(np.array(img))
+
+    if isinstance(img, Image.Image):
+        w, h = img.size
+        if w <= border * 2 or h <= border * 2:
+            return img
+        return img.crop((border, border, w - border, h - border))
+
+    arr = np.array(img)
+    if arr.ndim not in (2, 3):
+        return Image.fromarray(arr)
+
+    h, w = arr.shape[:2]
+    if w <= border * 2 or h <= border * 2:
+        if arr.ndim == 2:
+            return Image.fromarray(arr)
+        return Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB))
+
+    trimmed = arr[border : h - border, border : w - border]
+    if arr.ndim == 2:
+        return Image.fromarray(trimmed)
+    return Image.fromarray(cv2.cvtColor(trimmed, cv2.COLOR_BGR2RGB))
+
+
 def is_card_present(patch: np.ndarray | Image.Image, *, threshold: int = 240, min_ratio: float = 0.08) -> bool:
     """Heuristique simple : proportion de pixels *très clairs* sur la zone."""
 
@@ -309,3 +346,62 @@ def recognize_number_and_suit(
             best_suit = label
 
     return best_num, best_suit, best_num_score, best_suit_score
+
+
+def recognize_card_observation(
+    number_patch: Image.Image | np.ndarray,
+    suit_patch: Image.Image | np.ndarray,
+    idx: TemplateIndex,
+    *,
+    template_set: Optional[str] = None,
+    trim: int = 0,
+) -> CardObservation:
+    """Réalise une reconnaissance complète et retourne une observation structurée."""
+
+    trimmed_num = trim_card_patch(number_patch, trim)
+    trimmed_suit = trim_card_patch(suit_patch, trim)
+    value, suit, value_score, suit_score = recognize_number_and_suit(
+        trimmed_num,
+        trimmed_suit,
+        idx,
+        template_set=template_set,
+    )
+    return CardObservation(value, suit, float(value_score), float(suit_score))
+
+
+def _build_hold_templates() -> List[np.ndarray]:
+    base = np.full((28, 88), 255, dtype=np.uint8)
+    cv2.putText(base, "HOLD", (4, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.85, 0, 2, cv2.LINE_AA)
+    inverted = 255 - base
+    return [base, inverted]
+
+
+_HOLD_TEMPLATES: List[np.ndarray] = _build_hold_templates()
+
+
+def contains_hold_text(
+    patch: Image.Image | np.ndarray,
+    *,
+    threshold: float = 0.55,
+    scales: Sequence[float] = (0.75, 0.9, 1.0, 1.15, 1.3),
+) -> bool:
+    """Détecte grossièrement la présence du texte « HOLD » sur un patch."""
+
+    gray = _to_gray(patch)
+    if gray.size == 0:
+        return False
+
+    gray_u8 = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+    for tpl in _HOLD_TEMPLATES:
+        for scale in scales:
+            scaled_w = max(1, int(round(tpl.shape[1] * scale)))
+            scaled_h = max(1, int(round(tpl.shape[0] * scale)))
+            scaled_tpl = cv2.resize(tpl, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+            if gray_u8.shape[0] < scaled_tpl.shape[0] or gray_u8.shape[1] < scaled_tpl.shape[1]:
+                continue
+            res = cv2.matchTemplate(gray_u8, scaled_tpl, cv2.TM_CCOEFF_NORMED)
+            _, score, _, _ = cv2.minMaxLoc(res)
+            if score >= float(threshold):
+                return True
+    return False
