@@ -3,7 +3,9 @@
 # Aucune dépendance UI. Dépend de pillow uniquement pour charger l'image.
 
 from __future__ import annotations
-import os, json
+
+import os
+import json
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Mapping, Iterable
 from collections import OrderedDict
@@ -12,20 +14,28 @@ from PIL import Image
 from objet.services.game import Game
 from _utils import clamp_top_left, coerce_int, resolve_templates
 
-def _load_templated_json(coord_path: str) -> Optional[Dict[str, Any]]:
-    try:
-        with open(coord_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict) and "templates" in data and "regions" in data:
-            return data
-    except Exception:
-        pass
-    return None
+
+def _load_templated_json(coord_path: str) -> Dict[str, Any]:
+    """Charge coordinates.json et valide le format minimal.
+
+    Si le fichier est invalide, on laisse l'exception remonter.
+    """
+    with open(coord_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not (isinstance(data, dict) and "templates" in data and "regions" in data):
+        raise ValueError(f"coordinates.json invalide: {coord_path}")
+    return data
+
 
 class ZoneProject:
     """
     Représente un "projet" de zones pour un jeu (image + zones + templates).
-    Gère : chargement/écriture JSON, manipulations des régions, tailles de groupe…
+
+    Gère :
+      - chargement/écriture JSON,
+      - manipulations des régions,
+      - tailles de groupe,
+      - contraintes lock_same_y.
     """
 
     def __init__(self, game: Optional[Game] = None) -> None:
@@ -34,6 +44,8 @@ class ZoneProject:
         self.current_game: Optional[str] = None
         self.image_path: Optional[str] = None
         self.image: Optional[Image.Image] = None
+
+        # Capture/table (copie initiale de la config du jeu)
         self.table_capture: Dict[str, Any] = self.game.table.captures.table_capture
 
         # Données décrites par le JSON
@@ -51,7 +63,7 @@ class ZoneProject:
 
     @property
     def templates_resolved(self) -> Dict[str, Any]:
-        # recalcul léger à la demande (ou fais-le sur set)
+        # recalcul léger à la demande
         return resolve_templates(self.templates)
 
     def get_group_size(self, group: str) -> Tuple[int, int]:
@@ -65,16 +77,16 @@ class ZoneProject:
     # ---------- Découverte ----------
     @staticmethod
     def _find_expected_image(folder: str) -> Optional[str]:
-        """Return a plausible reference screenshot for *folder*.
+        """Retourne une capture plausible pour *folder* (full screen/table)."""
 
-        The editor now works with full-screen captures using absolute
-        coordinates.  We therefore prefer images such as ``test_screen`` or
-        ``test_fullscreen`` over legacy ``test_crop_result`` snapshots, while
-        still keeping them as a fallback for backwards compatibility.
-        """
-
-        prefer_bases = ["test_screen", "test_fullscreen", "test_table", "test_crop_result"]
+        prefer_bases = [
+            "test_screen",
+            "test_fullscreen",
+            "test_table",
+            
+        ]
         exts = [".png", ".jpg", ".jpeg"]
+
         for base in prefer_bases:
             for ext in exts:
                 candidate = os.path.join(folder, base + ext)
@@ -82,22 +94,19 @@ class ZoneProject:
                     return candidate
 
         def _iter_image_files() -> Iterable[Tuple[str, str]]:
-            try:
-                entries = sorted(os.listdir(folder))
-            except OSError:
-                return []
+            entries = sorted(os.listdir(folder))
             for name in entries:
                 lower = name.lower()
                 if any(lower.endswith(ext) for ext in exts):
                     yield name, lower
 
-        # First pass: favour non-crop, non-anchor images.
+        # 1er passage : évite les "anchor"/"crop" si possible
         for name, lower in _iter_image_files():
             if any(tag in lower for tag in ("anchor", "crop")):
                 continue
             return os.path.join(folder, name)
 
-        # Second pass: accept the first image we can find (legacy fallback).
+        # 2e passage : prend la première image trouvée
         for name, _lower in _iter_image_files():
             return os.path.join(folder, name)
 
@@ -148,7 +157,10 @@ class ZoneProject:
                 return None
             if len(values) < 4:
                 return None
-            x1, y1, x2, y2 = (coerce_int(values[0]), coerce_int(values[1]), coerce_int(values[2]), coerce_int(values[3]))
+            x1 = coerce_int(values[0])
+            y1 = coerce_int(values[1])
+            x2 = coerce_int(values[2])
+            y2 = coerce_int(values[3])
             if x2 < x1:
                 x1, x2 = x2, x1
             if y2 < y1:
@@ -201,18 +213,20 @@ class ZoneProject:
 
     @staticmethod
     def list_games(base_dir: str) -> List[str]:
-        games = []
-        try:
-            for name in sorted(os.listdir(base_dir)):
-                full = os.path.join(base_dir, name)
-                if os.path.isdir(full) and ZoneProject._find_expected_image(full):
-                    games.append(name)
-        except Exception:
-            pass
+        """Retourne la liste des jeux (dossiers avec au moins une image)."""
+        games: List[str] = []
+        for name in sorted(os.listdir(base_dir)):
+            full = os.path.join(base_dir, name)
+            if os.path.isdir(full) and ZoneProject._find_expected_image(full):
+                games.append(name)
         return games
 
     # ---------- Chargement ----------
     def load_game(self, base_dir: str, game_name: str) -> None:
+        """Charge un jeu : image + coordinates.json.
+
+        Ici on ne "corrige" pas les positions à l'ouverture, on reprend le JSON tel quel.
+        """
         self.base_dir = os.path.abspath(base_dir)
         self.current_game = game_name
 
@@ -226,30 +240,35 @@ class ZoneProject:
         self.image_path = img_path
         self.image = Image.open(img_path).convert("RGBA")
         W, H = self.image_size
-        self.table_capture.clear()
-        self.table_capture.update(self._default_table_capture(W, H))
-        self.templates.clear()
-        self.regions.clear()
 
-        data = _load_templated_json(coord_path) if os.path.isfile(coord_path) else None
-        if data:
-            self.table_capture.update(self._normalise_table_capture(data.get("table_capture"), W, H))
+        # Réinit capture / templates / regions depuis le fichier
+        self.table_capture = self._default_table_capture(W, H)
+        self.templates = {}
+        self.regions = OrderedDict()
+
+        if os.path.isfile(coord_path):
+            data = _load_templated_json(coord_path)
+            self.table_capture = self._normalise_table_capture(
+                data.get("table_capture"), W, H
+            )
             self.templates.update(data.get("templates", {}))
             regs = data.get("regions", {})
             for key, r in regs.items():
                 group = r.get("group", "")
-                tl = r.get("top_left", [0, 0])
+                # *** PAS DE VALEUR PAR DÉFAUT ***
+                tl = r["top_left"]
                 self.regions[key] = {
                     "group": group,
                     "top_left": [coerce_int(tl[0]), coerce_int(tl[1])],
                     "value": r.get("value"),
                     "label": r.get("label", key),
                 }
-            # clamp soft à l’ouverture (pas d’auto-align à ce stade)
-            self._clamp_all()
+            # IMPORTANT : plus de _clamp_all() ici → on respecte le JSON
         else:
             # base minimale si pas de JSON
-            self.templates.update({"action_button": {"size": [165, 70], "type": "texte"}})
+            self.templates.update(
+                {"action_button": {"size": [165, 70], "type": "texte"}}
+            )
 
         self._sync_game_capture()
 
@@ -269,8 +288,12 @@ class ZoneProject:
         return self.regions[key]
 
     def rename_region(self, old_key: str, new_key: str) -> str:
-        if new_key == old_key or new_key in self.regions or old_key not in self.regions:
+        if new_key == old_key:
             return old_key
+        if old_key not in self.regions:
+            raise KeyError(f"Region inconnue: {old_key}")
+        if new_key in self.regions:
+            raise KeyError(f"Nouvelle clé déjà existante: {new_key}")
         r = self.regions.pop(old_key)
         r["label"] = new_key
         self.regions[new_key] = r
@@ -278,19 +301,18 @@ class ZoneProject:
 
     def set_region_group(self, key: str, group: str) -> None:
         if key not in self.regions:
-            return
+            raise KeyError(f"Region inconnue: {key}")
         if group not in self.templates:
             # crée un groupe par défaut si inconnu
             self.templates[group] = {"size": [60, 40], "type": "mix"}
         self.regions[key]["group"] = group
         self._clamp_region(key)
-        # NB: on ne déclenche pas d’alignement global ici pour éviter les surprises
-        # (la contrainte lock_same_y s’applique surtout lors des déplacements/edition de Y)
 
     def set_region_pos(self, key: str, x: int, y: int) -> None:
-        """Déplace une région. Si le groupe a lock_same_y, aligne Y de toutes les régions du groupe."""
+        """Déplace une région. Si lock_same_y, aligne Y de toutes les régions du groupe."""
         if key not in self.regions:
-            return
+            raise KeyError(f"Region inconnue: {key}")
+
         g = self.regions[key]["group"]
         gw, gh = self.get_group_size(g)
         W, H = self.image_size
@@ -322,16 +344,22 @@ class ZoneProject:
                 while f"{key}_{i}" in self.regions:
                     i += 1
                 key = f"{key}_{i}"
-        self.regions[key] = {"group": group, "top_left": [x, y], "value": None, "label": key}
+        self.regions[key] = {
+            "group": group,
+            "top_left": [x, y],
+            "value": None,
+            "label": key,
+        }
         return key
 
     def delete_region(self, key: str) -> None:
-        self.regions.pop(key, None)
+        if key in self.regions:
+            self.regions.pop(key)
 
     # ---------- Opérations groupes ----------
     def set_group_size(self, group: str, w: int, h: int) -> None:
         if w <= 0 or h <= 0:
-            return
+            raise ValueError("Taille de groupe invalide")
         base = self.templates.get(group, {"type": "mix"})
         base["size"] = [int(w), int(h)]
         self.templates[group] = base
@@ -347,11 +375,16 @@ class ZoneProject:
     def export_payload(self) -> Dict[str, Any]:
         W, H = self.image_size
         tc = self._normalise_table_capture(self.table_capture, W, H)
-        out = {"table_capture": tc, "templates": self.templates, "regions": {}}
+        out: Dict[str, Any] = {
+            "table_capture": tc,
+            "templates": self.templates,
+            "regions": {},
+        }
         for key, r in self.regions.items():
+            tl = r["top_left"]  # *** pas de fallback [0,0] ***
             out["regions"][key] = {
                 "group": r.get("group", ""),
-                "top_left": [int(r.get("top_left", [0, 0])[0]), int(r.get("top_left", [0, 0])[1])],
+                "top_left": [int(tl[0]), int(tl[1])],
                 "value": r.get("value", None),
                 "label": r.get("label", key),
             }
@@ -369,11 +402,11 @@ class ZoneProject:
 
     def _clamp_region(self, key: str) -> None:
         if key not in self.regions:
-            return
+            raise KeyError(f"Region inconnue: {key}")
         W, H = self.image_size
         g = self.regions[key]["group"]
         gw, gh = self.get_group_size(g)
-        x, y = self.regions[key].get("top_left", [0, 0])
+        x, y = self.regions[key]["top_left"]  # *** pas de .get(...,[0,0]) ***
         x, y = clamp_top_left(coerce_int(x), coerce_int(y), gw, gh, W, H)
         self.regions[key]["top_left"] = [x, y]
 
@@ -381,27 +414,24 @@ class ZoneProject:
         """
         Aligne toutes les régions du groupe sur un même Y:
         - si anchor_y est fourni → on l'utilise (puis clamp commun).
-        - sinon → on prend le min des Y existants (puis clamp commun).
+        - sinon → min des Y existants (puis clamp commun).
         Clamp du X conservé par région.
         """
-        # Liste des clés du groupe
         keys = [k for k, r in self.regions.items() if r.get("group") == group]
         if not keys:
             return
 
         gw, gh = self.get_group_size(group)
         W, H = self.image_size
-        # Y cible
+
         if anchor_y is None:
             current_ys = [coerce_int(self.regions[k]["top_left"][1], 0) for k in keys]
             target_y = min(current_ys) if current_ys else 0
         else:
             target_y = coerce_int(anchor_y, 0)
 
-        # clamp commun
         target_y = max(0, min(target_y, max(0, H - gh)))
 
-        # Applique à tout le groupe (en clampant X individuellement)
         for k in keys:
             x, _y = self.regions[k]["top_left"]
             x, y = clamp_top_left(coerce_int(x), target_y, gw, gh, W, H)

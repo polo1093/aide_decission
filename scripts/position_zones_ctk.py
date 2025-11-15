@@ -19,7 +19,7 @@ from PIL import ImageTk, Image
 # =========================
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 DEFAULT_GAME_NAME = "PMU"
-DEFAULT_IMAGE_NAME = "test_crop.png"
+DEFAULT_IMAGE_NAME = "example_full_screen.png"
 
 # Chemin projet pour les imports
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +30,6 @@ from objet.services.game import Game
 from zone_project import ZoneProject
 
 APP_TITLE = "Zone Editor (CustomTkinter)"
-MAX_CANVAS_W = 1280
-MAX_CANVAS_H = 800
 
 
 class ZoneEditorCTK:
@@ -41,7 +39,12 @@ class ZoneEditorCTK:
 
         self.root = ctk.CTk()
         self.root.title(APP_TITLE)
-        self.root.geometry("1600x940")
+
+        # Plein écran ancré en (0, 0)
+        self.root.update_idletasks()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
 
         # Fermeture : aucune sauvegarde automatique
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -53,7 +56,7 @@ class ZoneEditorCTK:
         # Image affichée
         self.tk_img: Optional[ImageTk.PhotoImage] = None
         self.base_scale: float = 1.0
-        self.user_zoom: float = 1.0
+        self.user_zoom: float = 0.85  # zoom par défaut
         self.scale: float = 1.0
 
         # Dessin
@@ -90,10 +93,16 @@ class ZoneEditorCTK:
             number_of_steps=55,
             command=lambda v: self._on_zoom_slider(float(v)),
         )
-        self.zoom_slider.set(1.0)
+        self.zoom_slider.set(self.user_zoom)
         self.zoom_slider.pack(side="left", padx=6, pady=8)
-        self.zoom_pct_label = ctk.CTkLabel(top, text="100%")
+        self.zoom_pct_label = ctk.CTkLabel(top, text="85%")
         self.zoom_pct_label.pack(side="left", padx=(6, 2))
+
+        # Bouton "Ajuster" → remet à 85 %
+        self.btn_adjust = ctk.CTkButton(
+            top, text="Ajuster", width=80, command=self._zoom_85
+        )
+        self.btn_adjust.pack(side="left", padx=4, pady=8)
 
         # Enregistrer
         self.btn_save = ctk.CTkButton(
@@ -105,19 +114,17 @@ class ZoneEditorCTK:
         main = ctk.CTkFrame(self.root)
         main.pack(side="top", fill="both", expand=True)
 
-        # Canvas
+        # Canvas (zone d'image)
         cf = ctk.CTkFrame(main)
         cf.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=10)
         self.canvas = tk.Canvas(
             cf,
             bg="#F2F2F2",
             highlightthickness=0,
-            width=MAX_CANVAS_W,
-            height=MAX_CANVAS_H,
         )
         self.canvas.pack(fill="both", expand=True)
 
-        # Sidebar
+        # Sidebar (toujours visible)
         side = ctk.CTkFrame(main, width=360)
         side.pack(side="right", fill="y", padx=(5, 10), pady=10)
 
@@ -182,9 +189,16 @@ class ZoneEditorCTK:
         self.status.pack(side="bottom", fill="x", padx=8, pady=6)
 
     def _bind_canvas_events(self):
+        # Drag des zones (gauche)
         self.canvas.bind("<ButtonPress-1>", self._on_mouse_down)
         self.canvas.bind("<B1-Motion>", self._on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_mouse_up)
+
+        # Pan (main) : clic milieu OU clic droit
+        self.canvas.bind("<ButtonPress-2>", self._on_pan_start)
+        self.canvas.bind("<B2-Motion>", self._on_pan_move)
+        self.canvas.bind("<ButtonPress-3>", self._on_pan_start)
+        self.canvas.bind("<B3-Motion>", self._on_pan_move)
 
     # ---------- Jeux / fichiers ----------
     def _refresh_games_list(self):
@@ -209,7 +223,7 @@ class ZoneEditorCTK:
         # Charge la config du jeu (regions, templates, etc.)
         self.project.load_game(base, game_name)
 
-        # Force l'image sur config/<jeu>/test_crop.png (si ça manque, ça plante, c'est voulu)
+        # Force l'image sur config/<jeu>/example_full_screen.png (si ça manque, ça plante, c'est voulu)
         game_dir = Path(base) / game_name
         candidate = game_dir / DEFAULT_IMAGE_NAME
 
@@ -280,11 +294,13 @@ class ZoneEditorCTK:
         self.canvas.delete("all")
         self.rect_items.clear()
         self.text_items.clear()
-        w = self.tk_img.width() if self.tk_img else MAX_CANVAS_W
-        h = self.tk_img.height() if self.tk_img else MAX_CANVAS_H
-        self.canvas.config(width=w, height=h)
+
         if self.tk_img:
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
+            # Surface virtuelle = taille de l'image → pan possible
+            self.canvas.config(
+                scrollregion=(0, 0, self.tk_img.width(), self.tk_img.height())
+            )
 
     # ---------- Dessin ----------
     def _redraw_all(self):
@@ -294,6 +310,9 @@ class ZoneEditorCTK:
 
         if self.tk_img:
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
+            self.canvas.config(
+                scrollregion=(0, 0, self.tk_img.width(), self.tk_img.height())
+            )
 
         W, H = self.project.image_size
         if W == 0:
@@ -303,7 +322,6 @@ class ZoneEditorCTK:
         for key, r in self.project.regions.items():
             group = r.get("group", "")
             w, h = self.project.get_group_size(group)
-            # *** PAS DE VALEUR PAR DÉFAUT ***
             x, y = r["top_left"]
             dx0, dy0 = int(x * s), int(y * s)
             dx1, dy1 = int((x + w) * s), int((y + h) * s)
@@ -386,7 +404,7 @@ class ZoneEditorCTK:
         self.btn_apply.configure(state="normal")
         self._last_key = key
 
-    # ---------- Drag & drop ----------
+    # ---------- Drag & drop zones (gauche) ----------
     def _region_at_point(self, x: int, y: int) -> Optional[str]:
         for key, r in self.project.regions.items():
             gw, gh = self.project.get_group_size(r.get("group", ""))
@@ -397,7 +415,8 @@ class ZoneEditorCTK:
 
     def _on_mouse_down(self, event):
         s = self.scale if self.scale else 1.0
-        x, y = int(event.x / s), int(event.y / s)
+        # coord dans le repère image (pas canvas)
+        x, y = int(self.canvas.canvasx(event.x) / s), int(self.canvas.canvasy(event.y) / s)
         key = self._region_at_point(x, y)
         if key:
             self.dragging_key = key
@@ -414,8 +433,8 @@ class ZoneEditorCTK:
             return
         key = self.dragging_key
         s = self.scale if self.scale else 1.0
-        x = int(event.x / s) - self.drag_offset[0]
-        y = int(event.y / s) - self.drag_offset[1]
+        x = int(self.canvas.canvasx(event.x) / s) - self.drag_offset[0]
+        y = int(self.canvas.canvasy(event.y) / s) - self.drag_offset[1]
         self.project.set_region_pos(key, x, y)
         self._redraw_group(self.project.regions[key]["group"])
 
@@ -443,6 +462,15 @@ class ZoneEditorCTK:
                 self.canvas.coords(rid, dx0, dy0, dx1, dy1)
             if tid:
                 self.canvas.coords(tid, dx0 + 6, dy0 + 6)
+
+    # ---------- Pan (main) ----------
+    def _on_pan_start(self, event):
+        # point de départ pour le scan
+        self.canvas.scan_mark(event.x, event.y)
+
+    def _on_pan_move(self, event):
+        # déplacement de la vue (viewport) sans modifier les coords des objets
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
 
     # ---------- Actions ----------
     def _apply_changes(self):
@@ -498,6 +526,13 @@ class ZoneEditorCTK:
     # ---------- Zoom ----------
     def _on_zoom_slider(self, value: float):
         self.user_zoom = float(value)
+        self._update_display_image()
+        self._redraw_all()
+
+    def _zoom_85(self):
+        """Remet le zoom à 85 % via le bouton 'Ajuster'."""
+        self.user_zoom = 0.85
+        self.zoom_slider.set(self.user_zoom)
         self._update_display_image()
         self._redraw_all()
 

@@ -116,25 +116,11 @@ class ScanTable:
         - confidence_* : float entre 0.0 et 1.0
         """
 
-        if position_value is None or position_suit is None:
-            logging.debug(
-                "scan_carte: coordonnées manquantes pour la carte (value=%s, suit=%s)",
-                position_value,
-                position_suit,
-            )
-            return None, None, 0.0, 0.0
-
-        if self.screen_array is None:
-            logging.debug("scan_carte appelé sans capture d'écran disponible")
-            return None, None, 0.0, 0.0
 
         # crops séparés pour la valeur et le symbole
         image_card_value = self._extract_patch(position_value)
         image_card_suit = self._extract_patch(position_suit)
 
-        if image_card_value.size == 0 or image_card_suit.size == 0:
-            logging.debug("scan_carte: extraction vide pour les coordonnées %s / %s", position_value, position_suit)
-            return None, None, 0.0, 0.0
 
         if is_card_present(image_card_value):
             carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(
