@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple
 import random
+import logging
 
 import cv2
 import numpy as np
@@ -26,6 +27,7 @@ except Exception:
 
 from objet.services.game import Game
 
+from crop_core import crop_and_save
 # -----------------------------
 # Helpers: config & path
 # -----------------------------
@@ -92,37 +94,6 @@ def _default_game_dir() -> Path:
             return c
     return candidates[0]
 
-# -----------------------------
-# Matching & crop (mémoire)
-# -----------------------------
-
-def _find_ref_point(screenshot_rgba: Image.Image, reference_rgba: Image.Image) -> Tuple[int,int]:
-    scr_gray = cv2.cvtColor(np.array(screenshot_rgba.convert("RGB")), cv2.COLOR_RGB2GRAY)
-    ref_gray = cv2.cvtColor(np.array(reference_rgba.convert("RGB")), cv2.COLOR_RGB2GRAY)
-    res = cv2.matchTemplate(scr_gray, ref_gray, cv2.TM_CCOEFF_NORMED)
-    _minVal, _maxVal, _minLoc, maxLoc = cv2.minMaxLoc(res)
-    return int(maxLoc[0]), int(maxLoc[1])
-
-
-def _clamp_box(x1: int, y1: int, x2: int, y2: int, W: int, H: int) -> Tuple[int,int,int,int]:
-    x1 = max(0, min(x1, W)); y1 = max(0, min(y1, H))
-    x2 = max(0, min(x2, W)); y2 = max(0, min(y2, H))
-    if x2 < x1:
-        x1, x2 = x2, x1
-    if y2 < y1:
-        y1, y2 = y2, y1
-    return x1, y1, x2, y2
-
-
-def crop_from_size_and_offset(frame_rgba: Image.Image, size: Tuple[int,int], ref_offset: Tuple[int,int], *, reference_img: Image.Image) -> Tuple[Image.Image, Tuple[int,int]]:
-    W, H = int(size[0]), int(size[1])
-    rx, ry = int(ref_offset[0]), int(ref_offset[1])
-    ref_pt = _find_ref_point(frame_rgba, reference_img)
-    x0, y0 = int(ref_pt[0] - rx), int(ref_pt[1] - ry)
-    x1, y1 = x0 + W, y0 + H
-    x0, y0, x1, y1 = _clamp_box(x0, y0, x1, y1, frame_rgba.width, frame_rgba.height)
-    crop = frame_rgba.crop((x0, y0, x1, y1))
-    return crop, (x0, y0)
 
 # -----------------------------
 # Vidéo → crops chaque 1s (nom aléatoire)
@@ -155,27 +126,36 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--video", help="Explicit video path; default: game_dir/debug/cards_video/cards_video.*")
     parser.add_argument("--interval", type=float, default=3.0, help="Seconds between crops (default: 3.0)")
     parser.add_argument("--out", help="Output dir (default: game_dir/debug/crops)")
+    parser.add_argument("--log-level",default="INFO",help="Logging level (DEBUG, INFO, ...). Default: INFO",)
     args = parser.parse_args(argv)
 
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="[%(levelname)s] %(message)s",
+    )
+    
+    logger = logging.getLogger("crop_video_frames")
     game_dir = Path(args.game_dir)
     out_dir = Path(args.out) if args.out else (game_dir / "debug" / "crops")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     size, ref_offset, ref_path = _load_capture_params(game_dir)
     ref_img = Image.open(ref_path).convert("RGBA")
-    game = Game.for_script(Path(__file__).name)
-    game.update_from_capture(
-        table_capture={"size": list(size), "ref_offset": list(ref_offset)},
-        reference_path=str(ref_path),
-    )
-
+    game = None
+    if Game is not None:
+        game = Game.for_script(Path(__file__).name)
+        game.update_from_capture(
+            table_capture={"size": list(size), "ref_offset": list(ref_offset)},
+            reference_path=str(ref_path),
+        )
+    else:
+        logger.warning("Game service unavailable: %s", _IMPORT_ERROR)
     video_path = Path(args.video) if args.video else _auto_video(game_dir)
     if not video_path or not video_path.exists():
         raise SystemExit(f"ERROR: no video found. Put a file inside {game_dir/'debug'/'cards_video'} or pass --video")
-
-    print(f"Using game_dir: {game_dir}")
-    print(f"Using video:    {video_path}")
-    print(f"Crop size:      {size}  | ref_offset: {ref_offset}")
+    logger.info("Using game_dir: %s", game_dir)
+    logger.info("Using video:    %s", video_path)
+    logger.info("Crop size:      %s | ref_offset: %s", size, ref_offset)
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -186,20 +166,43 @@ def main(argv: Optional[list] = None) -> int:
         # BGR -> PIL RGBA
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_img = Image.fromarray(frame_rgb).convert("RGBA")
-        capture_size = tuple(game.table.captures.size or size)
-        capture_offset = tuple(game.table.captures.ref_offset or ref_offset)
-        crop, origin = crop_from_size_and_offset(frame_img, capture_size, capture_offset, reference_img=ref_img)
+        if game is not None and getattr(game.table.captures, "size", None):
+            capture_size = tuple(game.table.captures.size)
+        else:
+            capture_size = tuple(size)
+        if game is not None and getattr(game.table.captures, "ref_offset", None):
+            capture_offset = tuple(game.table.captures.ref_offset)
+        else:
+            capture_offset = tuple(ref_offset)
         # nom aléatoire dans [1, 10000]
         n = random.randint(1, 10000)
         fname = f"crop_{n}.png"
         out_path = out_dir / fname
-        crop.save(out_path)
+        origin, debug = crop_and_save(
+            frame_img,
+            capture_size,
+            capture_offset,
+            reference_img=ref_img,
+            output_path=out_path,
+            logger=logger,
+        )
+        if origin is None:
+            logger.warning("frame %s: crop failed (details=%s)", fidx, debug.to_log_dict())
+            continue
         count += 1
-        print(f"saved {out_path.name} origin={origin} size={crop.size}")
+        logger.info(
+            "frame %s: saved %s origin=%s anchor_score=%.3f",
+            fidx,
+            out_path.name,
+            origin,
+            (debug.anchor_score or 0.0),)
+
 
     cap.release()
+    logger.info("Extraction complete: %s crops saved", count)
     print(f"Done. {count} crops written to {out_dir}")
-    print("Game capture context:", game.table.captures.table_capture)
+    if game is not None:
+        print("Game capture context:", game.table.captures.table_capture)
     return 0
 
 

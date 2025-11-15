@@ -16,6 +16,19 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple, cast
 
+# Monkey-patch newer OpenCV builds that no longer expose the legacy constants so PyScreeze still loads.
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+else:
+    for legacy, modern in (
+        ("CV_LOAD_IMAGE_COLOR", "IMREAD_COLOR"),
+        ("CV_LOAD_IMAGE_GRAYSCALE", "IMREAD_GRAYSCALE"),
+    ):
+        if not hasattr(cv2, legacy) and hasattr(cv2, modern):
+            setattr(cv2, legacy, getattr(cv2, modern))
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))

@@ -8,12 +8,12 @@
       1256
     ],
     "size": [
-      1776,
-      1256
+      1915,
+      1173
     ],
     "ref_offset": [
-      807,
-      1082
+      1173,
+      875
     ]
   },
   "templates": {
@@ -67,7 +67,7 @@
         "lock_same_y": true
       },
       "size": [
-        30,
+        50,
         30
       ]
     },
@@ -167,22 +167,20 @@
     "player_card_1_number": {
       "group": "player_card_number",
       "top_left": [
-        557,
-        675
+        558,
+        673
       ],
       "value": null,
-      "label": "player_card_1_number",
-      "template_set": "hand"
+      "label": "player_card_1_number"
     },
     "player_card_2_number": {
       "group": "player_card_number",
       "top_left": [
         642,
-        675
+        673
       ],
       "value": null,
-      "label": "player_card_2_number",
-      "template_set": "hand"
+      "label": "player_card_2_number"
     },
     "player_card_1_symbol": {
       "group": "player_card_symbol",
@@ -191,8 +189,7 @@
         721
       ],
       "value": null,
-      "label": "player_card_1_symbol",
-      "template_set": "hand"
+      "label": "player_card_1_symbol"
     },
     "player_card_2_symbol": {
       "group": "player_card_symbol",
@@ -201,8 +198,7 @@
         721
       ],
       "value": null,
-      "label": "player_card_2_symbol",
-      "template_set": "hand"
+      "label": "player_card_2_symbol"
     },
     "board_card_1_number": {
       "group": "board_card_number",
@@ -211,8 +207,7 @@
         390
       ],
       "value": null,
-      "label": "board_card_1_number",
-      "template_set": "board"
+      "label": "board_card_1_number"
     },
     "board_card_2_number": {
       "group": "board_card_number",
@@ -221,8 +216,7 @@
         390
       ],
       "value": null,
-      "label": "board_card_2_number",
-      "template_set": "board"
+      "label": "board_card_2_number"
     },
     "board_card_3_number": {
       "group": "board_card_number",
@@ -231,8 +225,7 @@
         390
       ],
       "value": null,
-      "label": "board_card_3_number",
-      "template_set": "board"
+      "label": "board_card_3_number"
     },
     "board_card_4_number": {
       "group": "board_card_number",
@@ -241,8 +234,7 @@
         390
       ],
       "value": null,
-      "label": "board_card_4_number",
-      "template_set": "board"
+      "label": "board_card_4_number"
     },
     "board_card_5_number": {
       "group": "board_card_number",
@@ -251,8 +243,7 @@
         390
       ],
       "value": null,
-      "label": "board_card_5_number",
-      "template_set": "board"
+      "label": "board_card_5_number"
     },
     "board_card_1_symbol": {
       "group": "board_card_symbol",
@@ -261,8 +252,7 @@
         452
       ],
       "value": null,
-      "label": "board_card_1_symbol",
-      "template_set": "board"
+      "label": "board_card_1_symbol"
     },
     "board_card_2_symbol": {
       "group": "board_card_symbol",
@@ -271,8 +261,7 @@
         452
       ],
       "value": null,
-      "label": "board_card_2_symbol",
-      "template_set": "board"
+      "label": "board_card_2_symbol"
     },
     "board_card_3_symbol": {
       "group": "board_card_symbol",
@@ -281,8 +270,7 @@
         452
       ],
       "value": null,
-      "label": "board_card_3_symbol",
-      "template_set": "board"
+      "label": "board_card_3_symbol"
     },
     "board_card_4_symbol": {
       "group": "board_card_symbol",
@@ -291,8 +279,7 @@
         452
       ],
       "value": null,
-      "label": "board_card_4_symbol",
-      "template_set": "board"
+      "label": "board_card_4_symbol"
     },
     "board_card_5_symbol": {
       "group": "board_card_symbol",
@@ -301,8 +288,7 @@
         452
       ],
       "value": null,
-      "label": "board_card_5_symbol",
-      "template_set": "board"
+      "label": "board_card_5_symbol"
     },
     "pot": {
       "group": "other_money",

@@ -1,10 +1,11 @@
 import sys
-
+import json
+import logging
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import cv2
-import json
 import numpy as np
 from PIL import Image
 
@@ -16,6 +17,28 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# Logger / debug helpers
+LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class CropDebug:
+    """Debug information emitted when computing a crop."""
+
+    ref_point: Optional[Tuple[int, int]] = None
+    ref_score: Optional[float] = None
+    origin_raw: Optional[Tuple[int, int]] = None
+    origin: Optional[Tuple[int, int]] = None
+    clamp_applied: Optional[bool] = None
+    anchor_expected: Optional[Tuple[int, int]] = None
+    anchor_found: Optional[Tuple[int, int]] = None
+    anchor_score: Optional[float] = None
+    anchor_geom_ok: Optional[bool] = None
+    failure: Optional[str] = None
+
+    def to_log_dict(self) -> Dict[str, Union[int, float, str, Tuple[int, int], None]]:
+        data: Dict[str, Union[int, float, str, Tuple[int, int], None]] = asdict(self)
+        return {k: v for k, v in data.items() if v is not None}
 
 
 # ---------- Matching ----------
@@ -68,23 +91,23 @@ _GEOM_TOL = 1                  # tolérance géométrique intra-crop (px)
 
 # ---------- Géométrie ----------
 
-def _clamp_box(box: Tuple[int,int,int,int], size: Tuple[int,int]) -> Tuple[int,int,int,int]:
-    x1,y1,x2,y2 = box
-    W,H = size
+def _clamp_box(box: Tuple[int, int, int, int], size: Tuple[int, int]) -> Tuple[int, int, int, int]:
+    x1, y1, x2, y2 = box
+    W, H = size
     x1 = max(0, min(x1, W))
     y1 = max(0, min(y1, H))
     x2 = max(0, min(x2, W))
     y2 = max(0, min(y2, H))
     if x2 < x1:
-        x1,x2 = x2,x1
+        x1, x2 = x2, x1
     if y2 < y1:
-        y1,y2 = y2,y1
-    return x1,y1,x2,y2
+        y1, y2 = y2, y1
+    return x1, y1, x2, y2
 
 
-def _clamp_origin(x0: int, y0: int, size: Tuple[int,int], canvas: Tuple[int,int]) -> Tuple[int,int]:
-    W,H = canvas
-    w,h = size
+def _clamp_origin(x0: int, y0: int, size: Tuple[int, int], canvas: Tuple[int, int]) -> Tuple[int, int]:
+    W, H = canvas
+    w, h = size
     x0 = max(0, min(x0, max(0, W - w)))
     y0 = max(0, min(y0, max(0, H - h)))
     return x0, y0
@@ -94,23 +117,35 @@ def _clamp_origin(x0: int, y0: int, size: Tuple[int,int], canvas: Tuple[int,int]
 
 def crop_from_size_and_offset(
     screenshot_img: Image.Image,
-    size: Tuple[int,int],
-    ref_offset: Tuple[int,int],  # offset du point REF vers le coin haut-gauche de la fenêtre
+    size: Tuple[int, int],
+    ref_offset: Tuple[int, int],
     *,
-    reference_img: Image.Image,  # requis
-) -> Tuple[Optional[Image.Image], Optional[Tuple[int,int]]]:
-    """Retourne (crop, (x0,y0)).
+    reference_img: Image.Image,
+) -> Tuple[Optional[Image.Image], Optional[Tuple[int, int]]]:
+    return _crop_from_size_and_offset(
+        screenshot_img,
+        size,
+        ref_offset,
+        reference_img=reference_img,
+        return_details=False,
+    )
 
-    Comportement tolérant : si l'ancre n'est pas détectée sur le plein écran OU
-    si elle n'est pas validée *dans* le crop (score/tolérance internes), retourne (None, None).
 
-    - `size` = (W,H) de la fenêtre à extraire.
-    - `ref_offset` = (ox,oy) = position RELATIVE du gabarit `reference_img` *dans* la fenêtre
-      (distance depuis le coin haut-gauche de la fenêtre jusqu'au coin haut-gauche de `reference_img`).
-    - `reference_img` sert à retrouver la position absolue de l'ancre dans le screenshot.
+def _crop_from_size_and_offset(
+    screenshot_img: Image.Image,
+    size: Tuple[int, int],
+    ref_offset: Tuple[int, int],
+    *,
+    reference_img: Image.Image,
+    return_details: bool,
+) -> Union[
+    Tuple[Optional[Image.Image], Optional[Tuple[int, int]]],
+    Tuple[Optional[Image.Image], Optional[Tuple[int, int]], CropDebug],
+]:
+    """Retourne le crop et éventuellement les informations de debug."""
 
-    Coin du crop = REF_ABS - ref_offset. Clamp si nécessaire.
-    """
+    debug = CropDebug()
+
     W, H = int(size[0]), int(size[1])
     ox, oy = int(ref_offset[0]), int(ref_offset[1])
     if W <= 0 or H <= 0:
@@ -118,8 +153,11 @@ def crop_from_size_and_offset(
 
     # 1) Détection de l'ancre sur le screenshot
     (rx, ry), score = _match_top_left_and_score(screenshot_img, reference_img, method=_REF_METHOD)
+    debug.ref_point = (rx, ry)
+    debug.ref_score = score
     if score < _REF_THRESHOLD:
-        return None, None
+        debug.failure = "anchor_score_below_threshold"
+        return _maybe_with_details(None, None, debug, return_details)
 
     # 2) Calcul du crop (avec clamp)
     x0_raw, y0_raw = rx - ox, ry - oy
@@ -127,23 +165,106 @@ def crop_from_size_and_offset(
     x1, y1 = x0 + W, y0 + H
     crop = screenshot_img.crop((x0, y0, x1, y1))
 
+    debug.origin_raw = (x0_raw, y0_raw)
+    debug.origin = (x0, y0)
+    debug.clamp_applied = bool((x0 != x0_raw) or (y0 != y0_raw))
+
     # 3) Validation intra-crop (obligatoire, non paramétrable)
     ref_w, ref_h = reference_img.size
     ax_exp, ay_exp = rx - x0, ry - y0  # position attendue de l’ancre dans le crop
+    debug.anchor_expected = (ax_exp, ay_exp)
 
     # L’ancre doit tenir entièrement dans le crop
     if not (0 <= ax_exp <= W - ref_w and 0 <= ay_exp <= H - ref_h):
-        return None, None
+        debug.failure = "anchor_outside_crop"
+        return _maybe_with_details(None, None, debug, return_details)
 
     # Matching dans le crop
     (ax_found, ay_found), inside_score = _match_top_left_and_score(crop, reference_img, method=_REF_METHOD)
     ok_score = inside_score >= _INSIDE_THRESHOLD
     ok_geom = (abs(ax_found - ax_exp) <= _GEOM_TOL) and (abs(ay_found - ay_exp) <= _GEOM_TOL)
 
-    if not (ok_score and ok_geom):
-        return None, None
+    debug.anchor_found = (ax_found, ay_found)
+    debug.anchor_score = inside_score
+    debug.anchor_geom_ok = bool(ok_geom)
 
-    return crop, (x0, y0)
+    if not (ok_score and ok_geom):
+        debug.failure = "anchor_validation_failed"
+        return _maybe_with_details(None, None, debug, return_details)
+
+    return _maybe_with_details(crop, (x0, y0), debug, return_details)
+
+
+def _maybe_with_details(
+    crop: Optional[Image.Image],
+    origin: Optional[Tuple[int, int]],
+    debug: CropDebug,
+    return_details: bool,
+) -> Union[
+    Tuple[Optional[Image.Image], Optional[Tuple[int, int]]],
+    Tuple[Optional[Image.Image], Optional[Tuple[int, int]], CropDebug],
+]:
+    if return_details:
+        return crop, origin, debug
+    return crop, origin
+
+
+def crop_from_size_and_offset_with_debug(
+    screenshot_img: Image.Image,
+    size: Tuple[int, int],
+    ref_offset: Tuple[int, int],
+    *,
+    reference_img: Image.Image,
+) -> Tuple[Optional[Image.Image], Optional[Tuple[int, int]], CropDebug]:
+    return _crop_from_size_and_offset(
+        screenshot_img,
+        size,
+        ref_offset,
+        reference_img=reference_img,
+        return_details=True,
+    )
+
+
+def crop_and_save(
+    screenshot_img: Image.Image,
+    size: Tuple[int, int],
+    ref_offset: Tuple[int, int],
+    *,
+    reference_img: Image.Image,
+    output_path: Path,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[Optional[Tuple[int, int]], CropDebug]:
+    log = logger or LOGGER
+    crop, origin, debug = crop_from_size_and_offset_with_debug(
+        screenshot_img,
+        size,
+        ref_offset,
+        reference_img=reference_img,
+    )
+
+    log_payload = {
+        "size": tuple(map(int, size)),
+        "ref_offset": tuple(map(int, ref_offset)),
+        **debug.to_log_dict(),
+    }
+
+    if crop is None or origin is None:
+        failure = debug.failure or "unknown"
+        log.warning(
+            "crop_and_save failed: %s | params=%s",
+            failure,
+            log_payload,
+        )
+        return None, debug
+
+    x0, y0 = origin
+    bbox = (x0, y0, x0 + crop.size[0], y0 + crop.size[1])
+    log_payload.update({"origin": origin, "bbox": bbox})
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    crop.save(output_path)
+    log.info("crop saved origin=%s bbox=%s params=%s", origin, bbox, log_payload)
+    return origin, debug
 
 
 # ---------- Comparaison / Vérif ----------
@@ -156,15 +277,15 @@ def _compare_images(img_a: Image.Image, img_b: Image.Image, pix_tol: int = 0) ->
     diff = np.abs(a.astype(np.int16) - b.astype(np.int16))
     max_diff = int(diff.max())
     mean_diff = float(diff.mean())
-    return (max_diff <= int(pix_tol)), {"max_diff": float(max_diff), "mean_diff": mean_diff}
+    return (max_diff <= int(pix_tol)), {"max_diff": float(max_diff), "mean_diff": float(mean_diff)}
 
 
 
 def verify_geom(
     screenshot_img: Image.Image,
     expected_img: Image.Image,
-    size: Tuple[int,int],
-    ref_offset: Tuple[int,int],
+    size: Tuple[int, int],
+    ref_offset: Tuple[int, int],
     *,
     reference_img: Image.Image,
     geom_tol: int = 1,
@@ -202,7 +323,7 @@ def infer_size_and_offset(
     screenshot_img: Image.Image,
     expected_img: Image.Image,
     reference_img: Image.Image,
-) -> Tuple[Tuple[int,int], Tuple[int,int], Tuple[int,int], Tuple[int,int]]:
+) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
     """Calcule:
       - size = expected_img.size
       - crop_top_left_abs (cx,cy) en matchant `expected_img` dans le screenshot
@@ -219,7 +340,7 @@ def infer_size_and_offset(
 
 # ---------- JSON helpers ----------
 
-def save_capture_json(path: Path, size: Tuple[int,int], ref_offset: Tuple[int,int]) -> None:
+def save_capture_json(path: Path, size: Tuple[int, int], ref_offset: Tuple[int, int]) -> None:
     data = {}
     if path.exists():
         try:
@@ -269,7 +390,7 @@ def _auto_paths_for_game(game: str, game_dir_opt: Optional[str]) -> dict:
     return {"game_dir": game_dir, "screenshot": screenshot, "expected": expected, "reference": reference, "output": output}
 
 
-def parse_size(s: str) -> Tuple[int,int]:
+def parse_size(s: str) -> Tuple[int, int]:
     s = s.lower().replace("x", ",")
     parts = [p.strip() for p in s.split(",") if p.strip()]
     if len(parts) != 2:
@@ -281,7 +402,7 @@ def parse_size(s: str) -> Tuple[int,int]:
     return w, h
 
 
-def parse_offset(s: str) -> Tuple[int,int]:
+def parse_offset(s: str) -> Tuple[int, int]:
     parts = [p.strip() for p in s.split(",") if p.strip()]
     if len(parts) != 2:
         raise argparse.ArgumentTypeError("--ref-offset requires two integers: ox,oy")
@@ -333,7 +454,7 @@ def main(argv: Optional[list] = None) -> int:
     scr = _load_image(screenshot_path).convert("RGBA")
     exp = _load_image(expected_path).convert("RGBA")
     ref = _load_image(reference_path).convert("RGBA")
-    
+
     from objet.services.game import Game
     game = Game.for_script(Path(__file__).name)
 

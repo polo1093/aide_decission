@@ -26,6 +26,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+# Provide compatibility helpers for newer OpenCV builds so PyScreeze can import.
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+else:
+    for missing_attr, fallback_attr in (
+        ("CV_LOAD_IMAGE_COLOR", "IMREAD_COLOR"),
+        ("CV_LOAD_IMAGE_GRAYSCALE", "IMREAD_GRAYSCALE"),
+    ):
+        if not hasattr(cv2, missing_attr) and hasattr(cv2, fallback_attr):
+            setattr(cv2, missing_attr, getattr(cv2, fallback_attr))
+
 # Accès modules du dépôt
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
