@@ -94,34 +94,6 @@ class CardSample:
         return trim_card_patch(self.suit_patch, border)
 
 
-@dataclass
-class ObservationStatus:
-    observation: CardObservation
-    number_known: bool
-    suit_known: bool
-    number_strict: bool
-    suit_strict: bool
-
-    def missing_number(self, *, strict: bool = True) -> bool:
-        if strict:
-            return not self.number_strict
-        return not self.number_known
-
-    def missing_suit(self, *, strict: bool = True) -> bool:
-        if strict:
-            return not self.suit_strict
-        return not self.suit_known
-
-    def should_autoskip(self, force_all: bool) -> bool:
-        return self.number_strict and self.suit_strict and not force_all
-
-    def fallback_number(self) -> str:
-        return self.observation.value or "?"
-
-    def fallback_suit(self) -> str:
-        return self.observation.suit or "?"
-
-
 def _iter_capture_files(directory: Path) -> Iterable[Path]:
     for ext in ("*.png", "*.jpg", "*.jpeg", "*.bmp"):
         yield from sorted(directory.glob(ext))
@@ -324,34 +296,58 @@ def collect_card_samples(
             if _has_hold_overlay(card_patch):
                 print(f"[SKIP] {img_path.name} {base_key}: texte HOLD détecté, carte ignorée")
                 continue
+            if tpl_set and "hand" in tpl_set.lower() and contains_hold_text(num_patch):
+                print(
+                    f"[SKIP] {img_path.name} {base_key}: texte HOLD détecté, carte ignorée"
+                )
+                continue
             total_cards += 1
 
             observation = recognize_card_observation(
-                card_patch.number,
-                card_patch.suit,
+                num_patch,
+                suit_patch,
                 idx,
-                template_set=card_patch.template_set,
+                template_set=tpl_set,
                 trim=trim_border,
             )
 
-            status = _status_from_observation(
-                observation,
-                accept_threshold=float(accept_threshold),
-                strict_threshold=float(strict_threshold),
-            )
-            _log_strict_hits(img_path.name, base_key, status)
+            # deux niveaux de confiance : acceptable vs strict autoskip
+            num_known = bool(observation.value) and observation.value_score >= float(accept_threshold)
+            suit_known = bool(observation.suit) and observation.suit_score >= float(accept_threshold)
+            num_strict = bool(observation.value) and observation.value_score >= float(strict_threshold)
+            suit_strict = bool(observation.suit) and observation.suit_score >= float(strict_threshold)
+
+            # logs informatifs
+            if num_strict:
+                print(
+                    f"DISCOVERED number={observation.value} ({observation.value_score:.3f}) in {img_path.name} {base_key} → autoskip nombre"
+                )
+            if suit_strict:
+                print(
+                    f"DISCOVERED suit={observation.suit} ({observation.suit_score:.3f}) in {img_path.name} {base_key} → autoskip couleur"
+                )
 
             if status.should_autoskip(force_all):
                 auto_ok += 1
-                _log_auto_skip(img_path.name, base_key, status)
+                print(
+                    f"AUTO OK: {img_path.name} {base_key} → number={observation.value} ({observation.value_score:.2f}), "
+                    f"suit={observation.suit} ({observation.suit_score:.2f})"
+                )
                 continue
 
             samples.append(
                 _build_sample(
                     img_path=img_path,
                     base_key=base_key,
-                    card_patch=card_patch,
-                    status=status,
+                    number_patch=num_patch,
+                    suit_patch=suit_patch,
+                    template_set=tpl_set,
+                    number_suggestion=observation.value,
+                    suit_suggestion=observation.suit,
+                    number_score=float(observation.value_score),
+                    suit_score=float(observation.suit_score),
+                    num_known=num_strict,   # connu = seuil strict
+                    suit_known=suit_strict,
                 )
             )
 
@@ -691,6 +687,39 @@ if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
 
 
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Tuple, Sequence, Dict
+import itertools
+import time
+
+from PIL import Image, ImageTk
+import customtkinter as ctk
+import tkinter as tk
+
+# Dépend de votre module existant
+# capture_cards: TemplateIndex, recognize_number_and_suit, collect_card_patches, is_card_present
+from objet.scanner.cards_recognition import (
+    ROOT_TEMPLATE_SET,
+    TemplateIndex,
+    contains_hold_text,
+    is_card_present,
+    recognize_card_observation,
+    trim_card_patch,
+)
+from objet.utils.calibration import CardPatch, collect_card_patches
+
+DEFAULT_NUMBERS: Sequence[str] = (
+    "?",
+    "A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2",
+)
+DEFAULT_SUITS: Sequence[str] = ("?", "spades", "hearts", "diamonds", "clubs")
+
+
+def _trim(img: Image.Image, border: int) -> Image.Image:
+    return trim_card_patch(img, border)
+
+
 @dataclass
 class IdentifyResult:
     number: str
@@ -829,25 +858,20 @@ class CardIdentifier:
             template_set=tpl_set,
             trim=self.trim,
         )
-        status = _status_from_observation(
-            observation,
-            accept_threshold=self.threshold,
-            strict_threshold=self.strict,
-        )
-        trimmed_number = trim_card_patch(number_patch, self.trim)
-        trimmed_suit = trim_card_patch(suit_patch, self.trim)
+        num_s, suit_s = observation.value, observation.suit
+        s_num, s_suit = observation.value_score, observation.suit_score
+        tnum = _trim(number_patch, self.trim)
+        tsuit = _trim(suit_patch, self.trim)
 
-        if status.should_autoskip(force_all):
-            obs = status.observation
-            return IdentifyResult(
-                obs.value or "?",
-                obs.suit or "?",
-                {
-                    "source": "auto",
-                    "score_number": float(obs.value_score),
-                    "score_suit": float(obs.suit_score),
-                },
-            )
+        num_known_strict = bool(num_s) and float(s_num) >= self.strict
+        suit_known_strict = bool(suit_s) and float(s_suit) >= self.strict
+
+        if num_known_strict and suit_known_strict and not force_all:
+            return IdentifyResult(num_s, suit_s, {
+                "source": "auto",
+                "score_number": float(s_num),
+                "score_suit": float(s_suit),
+            })
 
         # 2) Si interactif: ne demander que la partie inconnue
         if interactive:
@@ -930,9 +954,10 @@ class CardIdentifier:
         card_patch = pairs.get(base_key)
         if not card_patch:
             return IdentifyResult("?", "?", {"source": "error", "reason": "region-missing"})
-        if _has_hold_overlay(card_patch):
+        tpl_set = card_patch.template_set
+        if tpl_set and "hand" in tpl_set.lower() and contains_hold_text(card_patch.number):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "hold-overlay"})
-        if not _card_patch_present(card_patch):
+        if not is_card_present(card_patch.number, threshold=215, min_ratio=0.04):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "no-card"})
         return self.identify_from_patches(
             card_patch.number,
