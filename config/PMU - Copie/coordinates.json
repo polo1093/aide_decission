@@ -1,7 +1,4 @@
 {
-  "table_capture": {
-    "enabled": true
-  },
   "templates": {
     "action_button": {
       "size": [
