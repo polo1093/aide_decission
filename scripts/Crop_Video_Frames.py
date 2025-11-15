@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import argparse
-import json
 from pathlib import Path
 from typing import Optional, Tuple
 import random
@@ -26,36 +25,28 @@ except Exception:
     pass
 
 from objet.services.game import Game
+from objet.utils.calibration import load_coordinates
 
 from crop_core import crop_and_save
 # -----------------------------
 # Helpers: config & path
 # -----------------------------
 
-def _load_capture_params(game_dir: Path) -> Tuple[Tuple[int,int], Tuple[int,int], Path]:
-    """Lit coordinates.json et me.* dans config/<game>.
-    Retourne (size(W,H), ref_offset(ox,oy), ref_path).
-    """
+def _load_capture_bounds(game_dir: Path) -> Tuple[int, int, int, int]:
+    """Lit coordinates.json et retourne les bornes absolues de la table."""
+
     coords = game_dir / "coordinates.json"
     if not coords.exists():
         raise SystemExit(f"ERROR: {coords} not found. Pass --game-dir or run configure_table_crop first.")
-    with coords.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    tc = data.get("table_capture", {})
-    size = tuple(tc.get("size", [0, 0]))
-    ref_offset = tuple(tc.get("ref_offset", [0, 0]))
-    if not size or size == (0, 0):
-        raise SystemExit("ERROR: table_capture.size missing or zero in coordinates.json")
-    # ref image
-    ref_path: Optional[Path] = None
-    for ext in (".png", ".jpg", ".jpeg"):
-        p = game_dir / f"me{ext}"
-        if p.exists():
-            ref_path = p
-            break
-    if not ref_path:
-        raise SystemExit(f"ERROR: me.png/.jpg not found in {game_dir}")
-    return (int(size[0]), int(size[1])), (int(ref_offset[0]), int(ref_offset[1])), ref_path
+
+    _regions, _templates, table_capture = load_coordinates(coords)
+    bounds = table_capture.get("bounds") if isinstance(table_capture, dict) else None
+    if not bounds or len(bounds) != 4:
+        raise SystemExit("ERROR: table_capture.bounds missing or invalid in coordinates.json")
+    x1, y1, x2, y2 = map(int, bounds)
+    if x2 <= x1 or y2 <= y1:
+        raise SystemExit("ERROR: table_capture.bounds has zero area")
+    return x1, y1, x2, y2
 
 
 def _auto_video(game_dir: Path) -> Optional[Path]:
@@ -94,6 +85,25 @@ def _default_game_dir() -> Path:
             return c
     return candidates[0]
 
+<<<<<<< HEAD
+=======
+# -----------------------------
+# Matching & crop (mémoire)
+# -----------------------------
+
+def crop_from_bounds(frame_rgba: Image.Image, bounds: Tuple[int, int, int, int]) -> Tuple[Image.Image, Tuple[int, int]]:
+    x1, y1, x2, y2 = bounds
+    x1 = max(0, min(int(x1), frame_rgba.width))
+    y1 = max(0, min(int(y1), frame_rgba.height))
+    x2 = max(0, min(int(x2), frame_rgba.width))
+    y2 = max(0, min(int(y2), frame_rgba.height))
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+    crop = frame_rgba.crop((x1, y1, x2, y2))
+    return crop, (x1, y1)
+>>>>>>> ba58e5c3c8cd276697a82ea4edfc5a2b6aacb52a
 
 # -----------------------------
 # Vidéo → crops chaque 1s (nom aléatoire)
@@ -139,6 +149,7 @@ def main(argv: Optional[list] = None) -> int:
     out_dir = Path(args.out) if args.out else (game_dir / "debug" / "crops")
     out_dir.mkdir(parents=True, exist_ok=True)
 
+<<<<<<< HEAD
     size, ref_offset, ref_path = _load_capture_params(game_dir)
     ref_img = Image.open(ref_path).convert("RGBA")
     game = None
@@ -156,6 +167,21 @@ def main(argv: Optional[list] = None) -> int:
     logger.info("Using game_dir: %s", game_dir)
     logger.info("Using video:    %s", video_path)
     logger.info("Crop size:      %s | ref_offset: %s", size, ref_offset)
+=======
+    bounds = _load_capture_bounds(game_dir)
+    game = Game.for_script(Path(__file__).name)
+    game.update_from_capture(
+        table_capture={"bounds": list(bounds)},
+    )
+
+    video_path = Path(args.video) if args.video else _auto_video(game_dir)
+    if not video_path or not video_path.exists():
+        raise SystemExit(f"ERROR: no video found. Put a file inside {game_dir/'debug'/'cards_video'} or pass --video")
+
+    print(f"Using game_dir: {game_dir}")
+    print(f"Using video:    {video_path}")
+    print(f"Crop bounds:    {bounds}")
+>>>>>>> ba58e5c3c8cd276697a82ea4edfc5a2b6aacb52a
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -166,6 +192,7 @@ def main(argv: Optional[list] = None) -> int:
         # BGR -> PIL RGBA
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_img = Image.fromarray(frame_rgb).convert("RGBA")
+<<<<<<< HEAD
         if game is not None and getattr(game.table.captures, "size", None):
             capture_size = tuple(game.table.captures.size)
         else:
@@ -174,6 +201,10 @@ def main(argv: Optional[list] = None) -> int:
             capture_offset = tuple(game.table.captures.ref_offset)
         else:
             capture_offset = tuple(ref_offset)
+=======
+        capture_bounds = tuple(game.table.captures.bounds or bounds)
+        crop, origin = crop_from_bounds(frame_img, capture_bounds)
+>>>>>>> ba58e5c3c8cd276697a82ea4edfc5a2b6aacb52a
         # nom aléatoire dans [1, 10000]
         n = random.randint(1, 10000)
         fname = f"crop_{n}.png"

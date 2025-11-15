@@ -1,277 +1,396 @@
 {
   "table_capture": {
-    "enabled": true,
-    "relative_bounds": [
-      -684,
-      -866,
-      929,
-      135
-    ]
+    "enabled": true
+  },
+  "templates": {
+    "action_button": {
+      "size": [
+        165,
+        70
+      ],
+      "type": "texte"
+    },
+    "player_money": {
+      "size": [
+        95,
+        40
+      ],
+      "type": "nombre"
+    },
+    "other_money": {
+      "size": [
+        75,
+        40
+      ],
+      "type": "nombre"
+    },
+    "board_card_number": {
+      "size": [
+        65,
+        55
+      ],
+      "type": "carte_numero",
+      "layout": {
+        "lock_same_y": true
+      }
+    },
+    "board_card_symbol": {
+      "size": [
+        50,
+        55
+      ],
+      "type": "carte_symbole",
+      "layout": {
+        "lock_same_y": true
+      }
+    },
+    "player_card_number": {
+      "size": [
+        65,
+        55
+      ],
+      "type": "carte_numero",
+      "layout": {
+        "lock_same_y": true
+      }
+    },
+    "player_card_symbol": {
+      "size": [
+        50,
+        55
+      ],
+      "type": "carte_symbole",
+      "layout": {
+        "lock_same_y": true
+      }
+    }
   },
   "regions": {
     "board_card_1_number": {
-      "coord_rel": [
-        -274,
-        -607,
-        -209,
-        -552
+      "group": "board_card_number",
+      "top_left": [
+        410,
+        259
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_1_number"
     },
     "board_card_2_number": {
-      "coord_rel": [
-        -131,
-        -607,
-        -66,
-        -552
+      "group": "board_card_number",
+      "top_left": [
+        553,
+        259
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_2_number"
     },
     "board_card_3_number": {
-      "coord_rel": [
-        13,
-        -607,
-        78,
-        -552
+      "group": "board_card_number",
+      "top_left": [
+        697,
+        259
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_3_number"
     },
     "board_card_4_number": {
-      "coord_rel": [
-        158,
-        -607,
-        223,
-        -552
+      "group": "board_card_number",
+      "top_left": [
+        842,
+        259
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_4_number"
     },
     "board_card_5_number": {
-      "coord_rel": [
-        303,
-        -607,
-        368,
-        -552
+      "group": "board_card_number",
+      "top_left": [
+        987,
+        259
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_5_number"
     },
     "board_card_1_symbol": {
-      "coord_rel": [
-        -274,
-        -552,
-        -224,
-        -497
+      "group": "board_card_symbol",
+      "top_left": [
+        410,
+        314
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_1_symbol"
     },
     "board_card_2_symbol": {
-      "coord_rel": [
-        -131,
-        -552,
-        -81,
-        -497
+      "group": "board_card_symbol",
+      "top_left": [
+        553,
+        314
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_2_symbol"
     },
     "board_card_3_symbol": {
-      "coord_rel": [
-        13,
-        -552,
-        63,
-        -497
+      "group": "board_card_symbol",
+      "top_left": [
+        697,
+        314
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_3_symbol"
     },
     "board_card_4_symbol": {
-      "coord_rel": [
-        158,
-        -552,
-        208,
-        -497
+      "group": "board_card_symbol",
+      "top_left": [
+        842,
+        314
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_4_symbol"
     },
     "board_card_5_symbol": {
-      "coord_rel": [
-        303,
-        -552,
-        353,
-        -497
+      "group": "board_card_symbol",
+      "top_left": [
+        987,
+        314
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "board",
+      "label": "board_card_5_symbol"
     },
     "player_card_1_number": {
-      "coord_rel": [
-        -54,
-        -186,
-        11,
-        -131
+      "group": "player_card_number",
+      "top_left": [
+        630,
+        680
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "hand",
+      "label": "player_card_1_number"
     },
     "player_card_2_number": {
-      "coord_rel": [
-        80,
-        -186,
-        145,
-        -131
+      "group": "player_card_number",
+      "top_left": [
+        764,
+        680
       ],
-      "coord_abs": null,
-      "type": "carte_numero",
-      "value": null
+      "size": [
+        65,
+        55
+      ],
+      "value": null,
+      "template_set": "hand",
+      "label": "player_card_2_number"
     },
     "player_card_1_symbol": {
-      "coord_rel": [
-        -54,
-        -131,
-        -4,
-        -76
+      "group": "player_card_symbol",
+      "top_left": [
+        630,
+        735
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "hand",
+      "label": "player_card_1_symbol"
     },
     "player_card_2_symbol": {
-      "coord_rel": [
-        80,
-        -131,
-        130,
-        -76
+      "group": "player_card_symbol",
+      "top_left": [
+        764,
+        735
       ],
-      "coord_abs": null,
-      "type": "carte_symbole",
-      "value": null
+      "size": [
+        50,
+        55
+      ],
+      "value": null,
+      "template_set": "hand",
+      "label": "player_card_2_symbol"
     },
     "pot": {
-      "coord_rel": [
-        102,
-        -657,
-        177,
-        -617
+      "group": "other_money",
+      "top_left": [
+        786,
+        209
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        75,
+        40
+      ],
+      "value": null,
+      "label": "pot"
     },
     "fond": {
-      "coord_rel": [
-        17,
-        52,
-        112,
-        92
+      "group": "player_money",
+      "top_left": [
+        701,
+        918
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "fond"
     },
     "button_1": {
-      "coord_rel": [
-        284,
-        65,
-        449,
-        135
+      "group": "action_button",
+      "top_left": [
+        968,
+        931
       ],
-      "coord_abs": null,
-      "type": "texte",
-      "value": null
+      "size": [
+        165,
+        70
+      ],
+      "value": null,
+      "label": "button_1"
     },
     "button_2": {
-      "coord_rel": [
-        521,
-        65,
-        686,
-        135
+      "group": "action_button",
+      "top_left": [
+        1205,
+        931
       ],
-      "coord_abs": null,
-      "type": "texte",
-      "value": null
+      "size": [
+        165,
+        70
+      ],
+      "value": null,
+      "label": "button_2"
     },
     "button_3": {
-      "coord_rel": [
-        764,
-        65,
-        929,
-        135
+      "group": "action_button",
+      "top_left": [
+        1448,
+        931
       ],
-      "coord_abs": null,
-      "type": "texte",
-      "value": null
+      "size": [
+        165,
+        70
+      ],
+      "value": null,
+      "label": "button_3"
     },
     "player_money_J1": {
-      "coord_rel": [
-        -684,
-        -211,
-        -589,
-        -171
+      "group": "player_money",
+      "top_left": [
+        0,
+        655
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "player_money_J1"
     },
     "player_money_J2": {
-      "coord_rel": [
-        -617,
-        -669,
-        -522,
-        -629
+      "group": "player_money",
+      "top_left": [
+        67,
+        197
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "player_money_J2"
     },
     "player_money_J3": {
-      "coord_rel": [
-        21,
-        -866,
-        116,
-        -826
+      "group": "player_money",
+      "top_left": [
+        705,
+        0
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "player_money_J3"
     },
     "player_money_J4": {
-      "coord_rel": [
-        660,
-        -669,
-        755,
-        -629
+      "group": "player_money",
+      "top_left": [
+        1344,
+        197
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "player_money_J4"
     },
     "player_money_J5": {
-      "coord_rel": [
-        726,
-        -211,
-        821,
-        -171
+      "group": "player_money",
+      "top_left": [
+        1410,
+        655
       ],
-      "coord_abs": null,
-      "type": "nombre",
-      "value": null
+      "size": [
+        95,
+        40
+      ],
+      "value": null,
+      "label": "player_money_J5"
     }
   }
 }

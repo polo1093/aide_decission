@@ -147,19 +147,3 @@ if __name__ == "__main__":
     else:
         print("Type d'image inattendu:", type(img))
 
-
-    
-
-
-    img = controller.game.table.scan.screen_crop  # BGR
-    if img is None:
-        print("Aucun crop de table disponible.")
-    else:
-        if isinstance(img, np.ndarray):
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            Image.fromarray(rgb).show()
-        elif isinstance(img, Image.Image):
-            img.show()
-        else:
-            print("Type d'image inattendu:", type(img))
-

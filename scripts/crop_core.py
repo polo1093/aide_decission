@@ -385,7 +385,7 @@ def _auto_paths_for_game(game: str, game_dir_opt: Optional[str]) -> dict:
     game_dir = Path(game_dir_opt) if game_dir_opt else Path("config") / (game or "PMU")
     screenshot = _find_first(game_dir, "test_crop", [".jpg", ".png", ".jpeg"])  # plein écran
     expected = _find_first(game_dir, "test_crop_result", [".png", ".jpg", ".jpeg"])  # fenêtre attendue
-    reference = _find_first(game_dir, "me", [".png", ".jpg", ".jpeg"])  # gabarit ref
+    reference = _find_first(game_dir, "anchor", [".png", ".jpg", ".jpeg"])  # gabarit ref
     output = game_dir / "coordinates.json"
     return {"game_dir": game_dir, "screenshot": screenshot, "expected": expected, "reference": reference, "output": output}
 

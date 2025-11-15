@@ -99,7 +99,7 @@ pip install -r requirements.txt
 python launch.py --profile demo                 # Exemple d’exécution
 ## Modifier les coordonnées
 
-Toutes les positions à l'écran sont définies dans le fichier `coordinates.json` à la racine du projet. Chaque entrée contient les coordonnées relatives d'une région sous la forme `[x1, y1, x2, y2]`. Modifiez ces valeurs pour adapter le bot à une nouvelle résolution ou interface, puis relancez le programme pour appliquer les changements.
+Toutes les positions à l'écran sont définies dans le fichier `coordinates.json` à la racine du projet. Chaque région expose désormais directement la position absolue de son coin haut-gauche via `top_left` (en pixels écran) et s'appuie sur un gabarit (`templates`) pour déterminer sa taille. Mettez à jour ces coordonnées pour adapter le bot à une nouvelle résolution ou interface, puis relancez le programme pour appliquer les changements.
 
 ## Capture de nouvelles cartes
 
