@@ -65,6 +65,7 @@ class Table:
                 position_value=card.card_coordinates_value,
                 position_suit=card.card_coordinates_suit,
                 template_set=card.template_set,
+                fold_state_key="player_state_me",
             )
             if value is not None or suit is not None:
                 if value != card.value and suit != card.suit:
