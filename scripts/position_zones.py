@@ -24,6 +24,13 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import customtkinter as ctk
 from PIL import Image, ImageTk
+import sys
+from pathlib import Path
+
+# Ajout racine du projet au PYTHONPATH
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from objet.services.game import Game
 from _utils import clamp_top_left, coerce_int, resolve_templates
