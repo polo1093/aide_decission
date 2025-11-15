@@ -1,6 +1,8 @@
 # aide de décision
+Philosophie. 
+Très important : si une fonction n'a pas le bon argument, ne peut pas charger une image, ne reçoit pas les bonnes choses en entrée, et bien je veux pas faire une exception. Je veux que le programme plante, crache.
 
-PUML manuelle 
+Je veux que le code soit simple à comprendre et puisse cracher si il y a un truc qui ne fonctionne pas. Je veux pas d'exceptions qui me cachent un problème. 
 
 ## Architecture globale
 

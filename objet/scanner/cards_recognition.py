@@ -15,7 +15,7 @@ from objet.utils.pyauto import locate_in_image
 __all__ = [
     "CardObservation",
     "TemplateIndex",
-    "contains_fold_me",
+    "is_cover_me_cards",
     "is_card_present",
     "match_best",
     "recognize_card_observation",
@@ -372,108 +372,58 @@ def recognize_card_observation(
     return CardObservation(value, suit, float(value_score), float(suit_score))
 
 
-def _build_hold_templates() -> List[np.ndarray]:
-    base = np.full((28, 88), 255, dtype=np.uint8)
-    cv2.putText(base, "HOLD", (4, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.85, 0, 2, cv2.LINE_AA)
-    inverted = 255 - base
-    return [base, inverted]
 
 
 
 
 
-_FOLD_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "config" / "PMU" / "fold.png"
-
-try:  # Pillow >= 9
-    _RESAMPLING = Image.Resampling.LANCZOS  # type: ignore[attr-defined]
-except AttributeError:  # Pillow < 9
-    _RESAMPLING = Image.LANCZOS  # type: ignore[attr-defined]
 
 
-@lru_cache(maxsize=None)
-def _load_fold_template() -> Optional[Image.Image]:
+import pyscreeze
+
+ACTIONS_DIR = Path(__file__).resolve().parents[2] / "config" / "PMU"
+
+ACTION_TEMPLATES: Dict[str, Path] = {
+    "CHECK": ACTIONS_DIR / "CHECK.png",
+    "PAIE": ACTIONS_DIR / "PAIE.png",
+    "RELANCER": ACTIONS_DIR / "RELANCER.png",
+    "fold": ACTIONS_DIR / "fold.png",
+}
+ 
+
+@lru_cache(maxsize=len(ACTION_TEMPLATES))
+def _load_is_cover_me_cards_template(path) -> Optional[Image.Image]:
     """Load the reference template used to detect the FOLD overlay."""
-
-    if not _FOLD_TEMPLATE_PATH.exists():
-        return None
-    try:
-        with Image.open(_FOLD_TEMPLATE_PATH) as img:
-            return img.convert("RGB")
-    except Exception:
-        return None
+    with Image.open(path) as img:
+        return img.convert("RGB")
 
 
-@lru_cache(maxsize=None)
-def _scaled_fold_template(scale: float) -> Optional[Image.Image]:
-    base = _load_fold_template()
-    if base is None:
-        return None
-    if not np.isfinite(scale) or scale <= 0:
-        return None
-    if abs(scale - 1.0) < 1e-6:
-        return base
-    width = max(1, int(round(base.width * scale)))
-    height = max(1, int(round(base.height * scale)))
-    return base.resize((width, height), _RESAMPLING)
-
-
-def _ensure_haystack(patch: Union[Image.Image, np.ndarray]) -> Tuple[Union[Image.Image, np.ndarray], bool]:
-    if isinstance(patch, Image.Image):
-        return patch.convert("RGB"), False
-    if isinstance(patch, np.ndarray):
-        if patch.size == 0:
-            return patch, False
-        assume_bgr = patch.ndim == 3 and patch.shape[2] == 3
-        return patch, assume_bgr
-    raise TypeError(f"Unsupported image type: {type(patch)}")
-
-
-def _haystack_shape(patch: Union[Image.Image, np.ndarray]) -> Tuple[int, int]:
-    if isinstance(patch, Image.Image):
-        return patch.width, patch.height
-    if isinstance(patch, np.ndarray) and patch.ndim >= 2:
-        return int(patch.shape[1]), int(patch.shape[0])
-    return 0, 0
-
-
-def contains_fold_me(
-    patch: Union[Image.Image, np.ndarray],
-    *,
-    threshold: float = 0.55,
-    scales: Sequence[float] = (0.75, 0.9, 1.0, 1.15, 1.3),
-) -> bool:
+def is_cover_me_cards(region: Image.Image,threshold: float = 0.55,) -> bool:
     """Return ``True`` when the *fold* overlay is detected inside ``patch``."""
+    # haystack = région où on cherche (player_state_me), en niveaux de gris
+    haystack_rgb = region.convert("RGB")
+    haystack_gray = cv2.cvtColor(np.array(haystack_rgb), cv2.COLOR_RGB2GRAY)
 
-    if patch is None:
-        return False
+    # img = haystack_rgb
+    # if isinstance(img, np.ndarray):
+    #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     Image.fromarray(rgb).show()
+    # elif isinstance(img, Image.Image):
+    #     img.show()
+    # else:
+    #     print("Type d'image inattendu:", type(img))
+    
+    for path in ACTION_TEMPLATES.values():
+        template_rgb = _load_is_cover_me_cards_template(path)
+        template_gray = cv2.cvtColor(np.array(template_rgb), cv2.COLOR_RGB2GRAY)
 
-    templates_available = False
-    for scale in scales:
-        if _scaled_fold_template(scale) is not None:
-            templates_available = True
-            break
-    if not templates_available:
-        return False
+        # matchTemplate → carte de scores normalisés
+        res = cv2.matchTemplate(haystack_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
 
-    haystack, assume_bgr = _ensure_haystack(patch)
-    width, height = _haystack_shape(haystack)
-    if width <= 0 or height <= 0:
-        return False
-
-    for scale in scales:
-        template = _scaled_fold_template(scale)
-        if template is None:
-            continue
-        if template.width > width or template.height > height:
-            continue
-        box = locate_in_image(
-            haystack=haystack,
-            needle=template,
-            assume_bgr=assume_bgr,
-            grayscale=True,
-            confidence=float(max(0.0, min(1.0, threshold))),
-        )
-        if box is not None:
+        # max_val est la "confidence" [0, 1]
+        if max_val >= threshold:
             return True
     return False
+    
     

@@ -37,7 +37,7 @@ from PIL import Image, ImageTk
 from objet.scanner.cards_recognition import (
     ROOT_TEMPLATE_SET,
     TemplateIndex,
-    contains_fold_me,
+    is_cover_me_cards,
     is_card_present,
     recognize_card_observation,
     trim_card_patch,
@@ -422,7 +422,7 @@ class CardIdentifier:
 
         # Overlay HOLD / FOLD → on considère la carte vide
         tpl_lower = (tpl_set or "").lower()
-        if "hand" in tpl_lower and contains_fold_me(card_patch.number):
+        if "hand" in tpl_lower and is_cover_me_cards(card_patch.number):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "hold-overlay"})
 
         # Test présence carte

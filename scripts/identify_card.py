@@ -15,12 +15,11 @@ Usage minimal:
     python scripts/identify_card.py --game PMU
 
 Options utiles:
-  --screens-dir   Dossier d’entrée (défaut: config/<game>/debug/screens)
+  --screens-dir   Dossier d’entrée (défaut: config/<jeu>/debug/screens)
   --strict        Score min (0-1) pour autoskip complet (def 0.985)
   --trim          Bordure rognée (px) pour la sauvegarde & la reco (def 6)
   --force-all     Forcer le dialog même si la reco est déjà suffisante
 """
-
 
 import argparse
 import sys
@@ -31,6 +30,7 @@ from typing import Dict, Iterable, Sequence, Tuple, Optional
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
 # Compat OpenCV pour PyScreeze
 try:
     import cv2
@@ -48,7 +48,7 @@ import numpy as np
 from PIL import Image
 
 from objet.services.card_identifier import CardIdentifier
-from objet.scanner.cards_recognition import contains_fold_me, is_card_present
+from objet.scanner.cards_recognition import is_cover_me_cards, is_card_present
 from _utils import (
     CardPatch,
     collect_card_patches,
@@ -131,15 +131,22 @@ def _load_table_image(img_path: Path) -> Optional[Image.Image]:
         return None
 
 
-# ---------- helpers cartes ----------
+# ---------- helpers cartes / overlay ----------
 
-def _has_hold_overlay(card_patch: CardPatch) -> bool:
-    """Détection overlay HOLD/FOLD sur la main (tu peux adapter selon ton implémentation)."""
+def _crop_region(table_img: Image.Image, region, offset: Tuple[int, int] = (0, 0)) -> Image.Image:
+    """Retourne un crop PIL à partir d'une région de coordinates.json et d'un offset."""
+    x, y = region.top_left
+    w, h = region.size
+    ox, oy = offset
+    return table_img.crop((x + ox, y + oy, x + ox + w, y + oy + h))
+
+
+def _has_hold_overlay(has_cover_me: bool, card_patch: CardPatch) -> bool:
+    """Retourne True si l'overlay joueur est présent et que la carte appartient à la main."""
     tpl_set = (card_patch.template_set or "").lower()
     if not any(token in tpl_set for token in ("hand", "player")):
         return False
-    # On utilise ici contains_fold_me sur le patch number
-    return contains_fold_me(card_patch.number, threshold=0.6)
+    return has_cover_me
 
 
 def _card_patch_present(card_patch: CardPatch) -> bool:
@@ -217,6 +224,14 @@ def main(argv: Sequence[str]) -> int:
             print(f"[WARN] Anchor score {score:.3f} trop faible pour {img_path.name}; offset ignoré")
             offset = (0, 0)
 
+        # Détection overlay joueur sur la bbox player_state_me
+        state_region = regions.get("player_state_me")
+        if state_region is not None:
+            state_patch = _crop_region(table_img, state_region, offset)
+            has_cover_me = is_cover_me_cards(state_patch, threshold=0.6)
+        else:
+            has_cover_me = False
+
         card_pairs = collect_card_patches(
             table_img,
             regions,
@@ -229,9 +244,10 @@ def main(argv: Sequence[str]) -> int:
             if not _card_patch_present(card_patch):
                 skipped_empty += 1
                 continue
-            if _has_hold_overlay(card_patch):
+
+            if _has_hold_overlay(has_cover_me, card_patch):
                 skipped_hold += 1
-                print(f"[SKIP] {img_path.name} {base_key}: texte HOLD/FOLD détecté, carte ignorée")
+                print(f"[SKIP] {img_path.name} {base_key}: overlay joueur détecté, carte ignorée")
                 continue
 
             total_cards += 1
@@ -259,6 +275,14 @@ def main(argv: Sequence[str]) -> int:
                 print(f"[CANCEL] {img_path.name} {base_key} → meilleure hypothèse {res.number}/{res.suit}")
             elif src == "guess":
                 print(f"[GUESS] {img_path.name} {base_key} → {res.number}/{res.suit}")
+            elif src == "delete":
+                try:
+                    img_path.unlink()
+                    print(f"[DELETE] {img_path.name} supprimée")
+                except OSError as e:
+                    print(f"[DELETE-ERR] {img_path.name}: {e}")
+                # on arrête le traitement des cartes pour cette capture
+                break
 
     print("==== RÉSUMÉ ====")
     print(f"Cartes vues              : {total_cards}")

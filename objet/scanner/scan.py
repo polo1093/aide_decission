@@ -16,7 +16,7 @@ from objet.utils.pyauto import locate_in_image
 from objet.utils.calibration import bbox_from_region, load_coordinates
 from objet.scanner.cards_recognition import (
     TemplateIndex,
-    contains_fold_me,
+    is_cover_me_cards,
     is_card_present,
     recognize_number_and_suit,
 )
@@ -195,7 +195,7 @@ class ScanTable:
                 candidates.append(number_patch)
 
         for patch in candidates:
-            if contains_fold_me(patch, threshold=0.6):
+            if is_cover_me_cards(patch, threshold=0.6):
                 return True
         return False
 
