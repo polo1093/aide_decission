@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from objet.state import ButtonsState, CaptureState, CardsState
 from objet.scanner.scan import ScanTable
-from objet.utils.calibration import Region, load_coordinates , bbox_from_region
+from objet.utils.calibration import load_coordinates, bbox_from_region
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 @dataclass
@@ -44,13 +44,13 @@ class Table:
     cards: CardsState = field(default_factory=CardsState)
     buttons: ButtonsState = field(default_factory=ButtonsState)
     captures: CaptureState = field(default_factory=CaptureState)
-    scan = ScanTable()
-    pot = Fond()
+    scan: ScanTable = field(default_factory=ScanTable)
+    pot: Fond = field(default_factory=Fond)
     new_party_flag: bool = False
     
     
     def __post_init__(self) -> None:
-        regions, templates_resolved, _ = load_coordinates(self.coord_path)
+        regions, _, _ = load_coordinates(self.coord_path)
         self.pot.coordinates_value = bbox_from_region(regions.get("pot"))
         
         
@@ -60,7 +60,7 @@ class Table:
             return False
         
         # --- Main héros (2 cartes) ---
-        for idx, card in enumerate(self.cards.me, start=1):
+        for card in self.cards.me:
             value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
                 position_value=card.card_coordinates_value,
                 position_suit=card.card_coordinates_suit,
@@ -76,7 +76,7 @@ class Table:
                 suit_score=confidence_suit,
             )
         
-        for idx, card in enumerate(self.cards.board, start=1):
+        for card in self.cards.board:
             if card.formatted is None:
                 value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
                     position_value=card.card_coordinates_value,

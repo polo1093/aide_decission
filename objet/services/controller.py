@@ -1,19 +1,15 @@
 # launch_controller.py à la racine du projet
 
-import cv2
-import numpy as np
-import PIL
-from PIL import ImageGrab, Image
-# from objet.services.cliqueur import Cliqueur
 from pathlib import Path
 import sys
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-class Controller():
+class Controller:
     def __init__(self):
         self.count = 0
         self.running = False
@@ -23,26 +19,14 @@ class Controller():
         from objet.services.game import Game
         self.game = Game()
         # self.click = Cliqueur()
-        
-    def main(self):
-        
-             # machine à état de la partie et save 
-            # Todo
-        
-            
-            
-        if self.game.scan_to_data_table():
-        
-            self.game.update_from_scan()
-            
 
-        
-        
-        
-        
+    def main(self):
+
+        if self.game.scan_to_data_table():
+            self.game.update_from_scan()
             return self.game_stat_to_string()
         self.cpt += 1
-        return "don t find"+f"     Scan n°{self.cpt}"
+        return f"don t find     Scan n°{self.cpt}"
         
 
     
@@ -127,23 +111,13 @@ if __name__ == "__main__":
     controller = Controller()
     result = controller.main()
     print(result)
-    
-  # Sécurisation : on vérifie que table/scan/screen_array existent
+
     scan = getattr(controller.game.table, "scan", None)
-    img = getattr(scan, "screen_array", None) if scan is not None else None
-  
-
-    import cv2
-    import numpy as np
-    from PIL import Image
-
-    img = controller.game.table.scan.screen_array  # BGR
-
-    if isinstance(img, np.ndarray):
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        Image.fromarray(rgb).show()
-    elif isinstance(img, Image.Image):
-        img.show()
+    screen_array = getattr(scan, "screen_array", None) if scan is not None else None
+    if screen_array is None:
+        print("Aucune capture disponible (screen_array est None).")
+    elif hasattr(screen_array, "shape"):
+        print("Capture disponible avec shape:", screen_array.shape)
     else:
-        print("Type d'image inattendu:", type(img))
+        print("Capture disponible de type:", type(screen_array))
 

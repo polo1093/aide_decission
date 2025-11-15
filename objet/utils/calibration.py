@@ -23,6 +23,7 @@ __all__ = [
     "load_coordinates",
     "extract_patch",
     "collect_card_patches",
+    "table_capture_origin",
     "CardPatch",
 ]
 
@@ -293,6 +294,64 @@ def _region_template_set(region: Region | Mapping[str, Any]) -> Optional[str]:
     return value_str or None
 
 
+def _normalise_origin(value: Any) -> Tuple[int, int]:
+    if isinstance(value, Iterable):
+        coords = list(value)
+    else:
+        coords = []
+    if coords:
+        ox = coerce_int(coords[0])
+    else:
+        ox = 0
+    if len(coords) >= 2:
+        oy = coerce_int(coords[1])
+    else:
+        oy = 0
+    return ox, oy
+
+
+def table_capture_origin(table_capture: Optional[Mapping[str, Any]]) -> Tuple[int, int]:
+    """Return the absolute origin (top-left corner) of the calibrated table."""
+
+    if not isinstance(table_capture, Mapping):
+        return 0, 0
+    origin = table_capture.get("origin")
+    if origin is None:
+        bounds = table_capture.get("bounds")
+        if isinstance(bounds, Iterable):
+            origin = list(bounds)[:2]
+    return _normalise_origin(origin)
+
+
+def _should_rebase_to_origin(
+    image: Image.Image,
+    table_capture: Optional[Mapping[str, Any]],
+) -> Tuple[bool, Tuple[int, int]]:
+    if not isinstance(table_capture, Mapping):
+        return False, (0, 0)
+
+    origin = table_capture_origin(table_capture)
+    size_raw = table_capture.get("size") if isinstance(table_capture, Mapping) else None
+    if isinstance(size_raw, Iterable):
+        size_vals = list(size_raw)
+    else:
+        size_vals = []
+    if len(size_vals) >= 2:
+        capture_w = coerce_int(size_vals[0])
+        capture_h = coerce_int(size_vals[1])
+    else:
+        capture_w = capture_h = 0
+
+    if capture_w <= 0 or capture_h <= 0:
+        return False, origin
+
+    width, height = image.size
+    tol = 2
+    if abs(width - capture_w) <= tol and abs(height - capture_h) <= tol:
+        return True, origin
+    return False, origin
+
+
 def collect_card_patches(
     table_img: Image.Image,
     regions: Mapping[str, Region | Mapping[str, Any]],
@@ -300,6 +359,8 @@ def collect_card_patches(
     pad: int = 4,
     groups_numbers: Tuple[str, ...] = ("player_card_number", "board_card_number"),
     groups_suits: Tuple[str, ...] = ("player_card_symbol", "board_card_symbol"),
+    table_capture: Optional[Mapping[str, Any]] = None,
+    offset: Tuple[int, int] = (0, 0),
 ) -> Dict[str, CardPatch]:
     """Return ``{base_key: CardPatch}`` for recognised card regions.
 
@@ -310,6 +371,10 @@ def collect_card_patches(
     """
 
     slots: Dict[str, Dict[str, object]] = {}
+
+    rebase, origin = _should_rebase_to_origin(table_img, table_capture)
+    ox, oy = origin
+    dx, dy = map(int, offset)
 
     for key, region in regions.items():
         group = _region_group(region)
@@ -328,7 +393,13 @@ def collect_card_patches(
             continue
 
         top_left, size = _region_geometry(region)
-        patch = extract_patch(table_img, top_left, size, pad=pad)
+        tx, ty = top_left
+        tx -= dx
+        ty -= dy
+        if rebase:
+            tx -= ox
+            ty -= oy
+        patch = extract_patch(table_img, (tx, ty), size, pad=pad)
         entry = slots.setdefault(base_key, {})
         entry[slot] = patch
         tpl = _region_template_set(region)
