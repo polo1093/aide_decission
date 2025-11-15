@@ -12,7 +12,7 @@ from PIL import Image
 __all__ = [
     "CardObservation",
     "TemplateIndex",
-    "contains_hold_text",
+    "contains_fold_me",
     "is_card_present",
     "match_best",
     "recognize_card_observation",
@@ -379,29 +379,12 @@ def _build_hold_templates() -> List[np.ndarray]:
 _HOLD_TEMPLATES: List[np.ndarray] = _build_hold_templates()
 
 
-def contains_hold_text(
+def contains_fold_me(
     patch: Image.Image | np.ndarray,
     *,
     threshold: float = 0.55,
     scales: Sequence[float] = (0.75, 0.9, 1.0, 1.15, 1.3),
 ) -> bool:
     """Détecte grossièrement la présence du texte « HOLD » sur un patch."""
-
-    gray = _to_gray(patch)
-    if gray.size == 0:
-        return False
-
-    gray_u8 = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-    for tpl in _HOLD_TEMPLATES:
-        for scale in scales:
-            scaled_w = max(1, int(round(tpl.shape[1] * scale)))
-            scaled_h = max(1, int(round(tpl.shape[0] * scale)))
-            scaled_tpl = cv2.resize(tpl, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
-            if gray_u8.shape[0] < scaled_tpl.shape[0] or gray_u8.shape[1] < scaled_tpl.shape[1]:
-                continue
-            res = cv2.matchTemplate(gray_u8, scaled_tpl, cv2.TM_CCOEFF_NORMED)
-            _, score, _, _ = cv2.minMaxLoc(res)
-            if score >= float(threshold):
-                return True
     return False
+    

@@ -51,7 +51,7 @@ from PIL import Image, ImageTk
 from objet.scanner.cards_recognition import (
     ROOT_TEMPLATE_SET,
     TemplateIndex,
-    contains_hold_text,
+    contains_fold_me,
     is_card_present,
     recognize_card_observation,
     trim_card_patch,
@@ -216,7 +216,7 @@ def collect_card_samples(
             tpl_set = card_patch.template_set
             if not is_card_present(num_patch, threshold=215, min_ratio=0.04):
                 continue
-            if tpl_set and "hand" in tpl_set.lower() and contains_hold_text(num_patch):
+            if tpl_set and "hand" in tpl_set.lower() and contains_fold_me(num_patch):
                 print(
                     f"[SKIP] {img_path.name} {base_key}: texte HOLD détecté, carte ignorée"
                 )
@@ -627,7 +627,7 @@ import tkinter as tk
 from objet.scanner.cards_recognition import (
     ROOT_TEMPLATE_SET,
     TemplateIndex,
-    contains_hold_text,
+    contains_fold_me,
     is_card_present,
     recognize_card_observation,
     trim_card_patch,
@@ -878,7 +878,7 @@ class CardIdentifier:
         if not card_patch:
             return IdentifyResult("?", "?", {"source": "error", "reason": "region-missing"})
         tpl_set = card_patch.template_set
-        if tpl_set and "hand" in tpl_set.lower() and contains_hold_text(card_patch.number):
+        if tpl_set and "hand" in tpl_set.lower() and contains_fold_me(card_patch.number):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "hold-overlay"})
         if not is_card_present(card_patch.number, threshold=215, min_ratio=0.04):
             return IdentifyResult("?", "?", {"source": "empty", "reason": "no-card"})
