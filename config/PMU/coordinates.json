@@ -80,6 +80,13 @@
         45,
         45
       ]
+    },
+    "player_state": {
+      "size": [
+        160,
+        70
+      ],
+      "type": "etat"
     }
   },
   "regions": {
@@ -163,6 +170,84 @@
       ],
       "value": null,
       "label": "player_money_J5"
+    },
+    "player_state_me": {
+      "group": "player_state",
+      "top_left": [
+        1234,
+        990
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_me"
+    },
+    "player_state_J1": {
+      "group": "player_state",
+      "top_left": [
+        877,
+        913
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_J1"
+    },
+    "player_state_J2": {
+      "group": "player_state",
+      "top_left": [
+        879,
+        466
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_J2"
+    },
+    "player_state_J3": {
+      "group": "player_state",
+      "top_left": [
+        1238,
+        389
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_J3"
+    },
+    "player_state_J4": {
+      "group": "player_state",
+      "top_left": [
+        1580,
+        468
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_J4"
+    },
+    "player_state_J5": {
+      "group": "player_state",
+      "top_left": [
+        1584,
+        915
+      ],
+      "size": [
+        160,
+        70
+      ],
+      "value": null,
+      "label": "player_state_J5"
     },
     "player_card_1_number": {
       "group": "player_card_number",
