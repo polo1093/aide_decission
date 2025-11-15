@@ -1,5 +1,5 @@
 
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -13,7 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from objet.utils.pyauto import locate_in_image
-from objet.scanner.cards_recognition import TemplateIndex, is_card_present, recognize_number_and_suit
+from objet.utils.calibration import bbox_from_region, load_coordinates
+from objet.scanner.cards_recognition import (
+    TemplateIndex,
+    contains_fold_me,
+    is_card_present,
+    recognize_number_and_suit,
+)
 
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 DEFAULT_ANCHOR_PATH = Path("config/PMU/anchor.png")
@@ -41,6 +47,8 @@ class ScanTable:
         self.cards_root = DEFAULT_CARDS_ROOT
         self.template_index = TemplateIndex(self.cards_root)
         self.template_index.load()
+        self.player_state_boxes: Dict[str, Tuple[int, int, int, int]] = {}
+        self._load_player_state_regions()
         self.set_thresholds(value_threshold=value_threshold, suit_threshold=suit_threshold)
         # Première capture
         self.screen_refresh()
@@ -107,6 +115,7 @@ class ScanTable:
         position_suit: Tuple[int, int, int, int],
         *,
         template_set: Optional[str] = None,
+        fold_state_key: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[str], float, float]:
         """
         Retourne:
@@ -121,6 +130,9 @@ class ScanTable:
         image_card_value = self._extract_patch(position_value)
         image_card_suit = self._extract_patch(position_suit)
 
+
+        if self._should_skip_for_fold(image_card_value, template_set, fold_state_key):
+            return None, None, 0.0, 0.0
 
         if is_card_present(image_card_value):
             carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(
@@ -138,6 +150,63 @@ class ScanTable:
 
             return value_ok, suit_ok, conf_val, conf_suit
         return None, None, 0.0, 0.0
+
+    def _load_player_state_regions(self) -> None:
+        try:
+            regions, _, _ = load_coordinates(self.coord_path)
+        except FileNotFoundError:
+            logging.getLogger(__name__).warning(
+                "Fichier de coordonnées introuvable pour la détection FOLD: %s",
+                self.coord_path,
+            )
+            return
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Échec du chargement des coordonnées pour la détection FOLD: %s",
+                exc,
+            )
+            return
+
+        for key, region in regions.items():
+            if not key.startswith("player_state"):
+                continue
+            box = bbox_from_region(region)
+            if box:
+                self.player_state_boxes[key] = box
+
+    def _should_skip_for_fold(
+        self,
+        number_patch: np.ndarray,
+        template_set: Optional[str],
+        fold_state_key: Optional[str],
+    ) -> bool:
+        candidates: List[Union[np.ndarray, Image.Image]] = []
+
+        if fold_state_key:
+            box = self.player_state_boxes.get(fold_state_key)
+            if box is not None:
+                state_patch = self._extract_patch(box, pad=0)
+                if self._patch_has_pixels(state_patch):
+                    candidates.append(state_patch)
+
+        template_hint = (template_set or "").lower()
+        if not candidates and any(token in template_hint for token in ("hand", "player")):
+            if self._patch_has_pixels(number_patch):
+                candidates.append(number_patch)
+
+        for patch in candidates:
+            if contains_fold_me(patch, threshold=0.6):
+                return True
+        return False
+
+    @staticmethod
+    def _patch_has_pixels(patch: Union[np.ndarray, Image.Image]) -> bool:
+        if isinstance(patch, np.ndarray):
+            return patch.size > 0 and patch.ndim >= 2 and patch.shape[0] > 0 and patch.shape[1] > 0
+        if isinstance(patch, Image.Image):
+            width, height = patch.size
+            return width > 0 and height > 0
+        return False
 
 
  

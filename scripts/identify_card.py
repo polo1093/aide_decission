@@ -136,10 +136,10 @@ def _load_table_image(img_path: Path) -> Optional[Image.Image]:
 def _has_hold_overlay(card_patch: CardPatch) -> bool:
     """Détection overlay HOLD/FOLD sur la main (tu peux adapter selon ton implémentation)."""
     tpl_set = (card_patch.template_set or "").lower()
-    if "hand" not in tpl_set:
+    if not any(token in tpl_set for token in ("hand", "player")):
         return False
     # On utilise ici contains_fold_me sur le patch number
-    return contains_fold_me(card_patch.number)
+    return contains_fold_me(card_patch.number, threshold=0.6)
 
 
 def _card_patch_present(card_patch: CardPatch) -> bool:

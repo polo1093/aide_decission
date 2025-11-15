@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import cv2
 import numpy as np
 from PIL import Image
+
+from objet.utils.pyauto import locate_in_image
 
 __all__ = [
     "CardObservation",
@@ -379,15 +382,98 @@ def _build_hold_templates() -> List[np.ndarray]:
 
 
 
+_FOLD_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "config" / "PMU" / "fold.png"
+
+try:  # Pillow >= 9
+    _RESAMPLING = Image.Resampling.LANCZOS  # type: ignore[attr-defined]
+except AttributeError:  # Pillow < 9
+    _RESAMPLING = Image.LANCZOS  # type: ignore[attr-defined]
+
+
+@lru_cache(maxsize=None)
+def _load_fold_template() -> Optional[Image.Image]:
+    """Load the reference template used to detect the FOLD overlay."""
+
+    if not _FOLD_TEMPLATE_PATH.exists():
+        return None
+    try:
+        with Image.open(_FOLD_TEMPLATE_PATH) as img:
+            return img.convert("RGB")
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=None)
+def _scaled_fold_template(scale: float) -> Optional[Image.Image]:
+    base = _load_fold_template()
+    if base is None:
+        return None
+    if not np.isfinite(scale) or scale <= 0:
+        return None
+    if abs(scale - 1.0) < 1e-6:
+        return base
+    width = max(1, int(round(base.width * scale)))
+    height = max(1, int(round(base.height * scale)))
+    return base.resize((width, height), _RESAMPLING)
+
+
+def _ensure_haystack(patch: Union[Image.Image, np.ndarray]) -> Tuple[Union[Image.Image, np.ndarray], bool]:
+    if isinstance(patch, Image.Image):
+        return patch.convert("RGB"), False
+    if isinstance(patch, np.ndarray):
+        if patch.size == 0:
+            return patch, False
+        assume_bgr = patch.ndim == 3 and patch.shape[2] == 3
+        return patch, assume_bgr
+    raise TypeError(f"Unsupported image type: {type(patch)}")
+
+
+def _haystack_shape(patch: Union[Image.Image, np.ndarray]) -> Tuple[int, int]:
+    if isinstance(patch, Image.Image):
+        return patch.width, patch.height
+    if isinstance(patch, np.ndarray) and patch.ndim >= 2:
+        return int(patch.shape[1]), int(patch.shape[0])
+    return 0, 0
+
+
 def contains_fold_me(
-    patch: Image.Image | np.ndarray,
+    patch: Union[Image.Image, np.ndarray],
     *,
     threshold: float = 0.55,
     scales: Sequence[float] = (0.75, 0.9, 1.0, 1.15, 1.3),
 ) -> bool:
-    
-    
-    # si il y a l'image fold a 60 de confiance return True dnas la bbox de player_state_me 
-    
+    """Return ``True`` when the *fold* overlay is detected inside ``patch``."""
+
+    if patch is None:
+        return False
+
+    templates_available = False
+    for scale in scales:
+        if _scaled_fold_template(scale) is not None:
+            templates_available = True
+            break
+    if not templates_available:
+        return False
+
+    haystack, assume_bgr = _ensure_haystack(patch)
+    width, height = _haystack_shape(haystack)
+    if width <= 0 or height <= 0:
+        return False
+
+    for scale in scales:
+        template = _scaled_fold_template(scale)
+        if template is None:
+            continue
+        if template.width > width or template.height > height:
+            continue
+        box = locate_in_image(
+            haystack=haystack,
+            needle=template,
+            assume_bgr=assume_bgr,
+            grayscale=True,
+            confidence=float(max(0.0, min(1.0, threshold))),
+        )
+        if box is not None:
+            return True
     return False
     
