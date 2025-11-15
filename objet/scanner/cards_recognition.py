@@ -385,6 +385,9 @@ def contains_fold_me(
     threshold: float = 0.55,
     scales: Sequence[float] = (0.75, 0.9, 1.0, 1.15, 1.3),
 ) -> bool:
-    """Détecte grossièrement la présence du texte « HOLD » sur un patch."""
+    
+    
+    # si il y a l'image fold a 60 de confiance return True dnas la bbox de player_state_me 
+    
     return False
     
