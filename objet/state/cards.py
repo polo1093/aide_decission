@@ -1,4 +1,3 @@
-# objet/state/cards.py
 """Gestion de l'état des cartes de la table.
 
 - 5 cartes de board

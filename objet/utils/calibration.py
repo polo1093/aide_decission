@@ -6,7 +6,6 @@ functions remain dependency-light so they can be used from both
 application code and standalone scripts without creating circular
 imports.
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
