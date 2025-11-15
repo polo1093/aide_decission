@@ -376,7 +376,7 @@ def _build_hold_templates() -> List[np.ndarray]:
     return [base, inverted]
 
 
-_HOLD_TEMPLATES: List[np.ndarray] = _build_hold_templates()
+
 
 
 def contains_fold_me(
