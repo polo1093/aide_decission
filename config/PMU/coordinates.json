@@ -1,4 +1,21 @@
 {
+  "table_capture": {
+    "enabled": true,
+    "bounds": [
+      0,
+      0,
+      2560,
+      1440
+    ],
+    "origin": [
+      0,
+      0
+    ],
+    "size": [
+      2560,
+      1440
+    ]
+  },
   "templates": {
     "action_button": {
       "size": [
@@ -60,8 +77,8 @@
         "lock_same_y": true
       },
       "size": [
-        40,
-        40
+        45,
+        45
       ]
     }
   },
@@ -150,8 +167,8 @@
     "player_card_1_number": {
       "group": "player_card_number",
       "top_left": [
-        1202,
-        865
+        1200,
+        862
       ],
       "value": null,
       "label": "player_card_1_number"
@@ -160,7 +177,7 @@
       "group": "player_card_number",
       "top_left": [
         1286,
-        865
+        862
       ],
       "value": null,
       "label": "player_card_2_number"
@@ -168,8 +185,8 @@
     "player_card_1_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        1230,
-        918
+        1228,
+        915
       ],
       "value": null,
       "label": "player_card_1_symbol"
@@ -177,8 +194,8 @@
     "player_card_2_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        1316,
-        918
+        1313,
+        915
       ],
       "value": null,
       "label": "player_card_2_symbol"
@@ -186,8 +203,8 @@
     "board_card_1_number": {
       "group": "board_card_number",
       "top_left": [
-        999,
-        578
+        996,
+        576
       ],
       "value": null,
       "label": "board_card_1_number"
@@ -196,7 +213,7 @@
       "group": "board_card_number",
       "top_left": [
         1113,
-        578
+        576
       ],
       "value": null,
       "label": "board_card_2_number"
@@ -205,7 +222,7 @@
       "group": "board_card_number",
       "top_left": [
         1235,
-        578
+        576
       ],
       "value": null,
       "label": "board_card_3_number"
@@ -214,7 +231,7 @@
       "group": "board_card_number",
       "top_left": [
         1351,
-        578
+        576
       ],
       "value": null,
       "label": "board_card_4_number"
@@ -223,7 +240,7 @@
       "group": "board_card_number",
       "top_left": [
         1474,
-        578
+        576
       ],
       "value": null,
       "label": "board_card_5_number"
