@@ -5,7 +5,7 @@
 from __future__ import annotations
 import os, json
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Mapping, Iterable
 from collections import OrderedDict
 from PIL import Image
 
@@ -65,15 +65,139 @@ class ZoneProject:
     # ---------- Découverte ----------
     @staticmethod
     def _find_expected_image(folder: str) -> Optional[str]:
-        """Returns path to test_crop_result with supported extensions, else None."""
-        bases = ["test_crop_result"]
+        """Return a plausible reference screenshot for *folder*.
+
+        The editor now works with full-screen captures using absolute
+        coordinates.  We therefore prefer images such as ``test_screen`` or
+        ``test_fullscreen`` over legacy ``test_crop_result`` snapshots, while
+        still keeping them as a fallback for backwards compatibility.
+        """
+
+        prefer_bases = ["test_screen", "test_fullscreen", "test_table", "test_crop_result"]
         exts = [".png", ".jpg", ".jpeg"]
-        for base in bases:
+        for base in prefer_bases:
             for ext in exts:
-                p = os.path.join(folder, base + ext)
-                if os.path.isfile(p):
-                    return p
+                candidate = os.path.join(folder, base + ext)
+                if os.path.isfile(candidate):
+                    return candidate
+
+        def _iter_image_files() -> Iterable[Tuple[str, str]]:
+            try:
+                entries = sorted(os.listdir(folder))
+            except OSError:
+                return []
+            for name in entries:
+                lower = name.lower()
+                if any(lower.endswith(ext) for ext in exts):
+                    yield name, lower
+
+        # First pass: favour non-crop, non-anchor images.
+        for name, lower in _iter_image_files():
+            if any(tag in lower for tag in ("anchor", "crop")):
+                continue
+            return os.path.join(folder, name)
+
+        # Second pass: accept the first image we can find (legacy fallback).
+        for name, _lower in _iter_image_files():
+            return os.path.join(folder, name)
+
         return None
+
+    @staticmethod
+    def _default_table_capture(width: int, height: int) -> Dict[str, Any]:
+        w = max(0, int(width))
+        h = max(0, int(height))
+        return {
+            "enabled": True,
+            "bounds": [0, 0, w, h],
+            "origin": [0, 0],
+            "size": [w, h],
+        }
+
+    @staticmethod
+    def _normalise_table_capture(
+        raw: Optional[Mapping[str, Any]],
+        width: int,
+        height: int,
+    ) -> Dict[str, Any]:
+        base = ZoneProject._default_table_capture(width, height)
+        payload: Mapping[str, Any]
+        payload = raw if isinstance(raw, Mapping) else {}
+
+        result: Dict[str, Any] = dict(base)
+        for key, value in payload.items():
+            if key == "relative_bounds":
+                continue
+            result[key] = value
+
+        def _as_pair(value: Any) -> Optional[Tuple[int, int]]:
+            if isinstance(value, Iterable):
+                values = list(value)
+            else:
+                return None
+            if not values:
+                return None
+            x = coerce_int(values[0])
+            y = coerce_int(values[1]) if len(values) >= 2 else 0
+            return x, y
+
+        def _as_bounds(value: Any) -> Optional[List[int]]:
+            if isinstance(value, Iterable):
+                values = list(value)
+            else:
+                return None
+            if len(values) < 4:
+                return None
+            x1, y1, x2, y2 = (coerce_int(values[0]), coerce_int(values[1]), coerce_int(values[2]), coerce_int(values[3]))
+            if x2 < x1:
+                x1, x2 = x2, x1
+            if y2 < y1:
+                y1, y2 = y2, y1
+            return [x1, y1, x2, y2]
+
+        bounds = _as_bounds(result.get("bounds"))
+        if bounds is None and isinstance(payload, Mapping):
+            rel = payload.get("relative_bounds")
+            if isinstance(rel, Iterable):
+                rel_vals = list(rel)
+            else:
+                rel_vals = []
+            if len(rel_vals) >= 4:
+                x = coerce_int(rel_vals[0])
+                y = coerce_int(rel_vals[1])
+                w = max(0, coerce_int(rel_vals[2]))
+                h = max(0, coerce_int(rel_vals[3]))
+                bounds = [x, y, x + w, y + h]
+        if bounds is None:
+            origin = _as_pair(result.get("origin"))
+            size = _as_pair(result.get("size"))
+            if origin and size:
+                ox, oy = origin
+                sw = max(0, size[0])
+                sh = max(0, size[1])
+                bounds = [ox, oy, ox + sw, oy + sh]
+        if bounds is None:
+            bounds = base["bounds"]
+        result["bounds"] = bounds
+
+        origin = _as_pair(result.get("origin"))
+        if origin is None:
+            origin = (bounds[0], bounds[1])
+        result["origin"] = [origin[0], origin[1]]
+
+        size = _as_pair(result.get("size"))
+        if size is None:
+            size = (max(0, bounds[2] - bounds[0]), max(0, bounds[3] - bounds[1]))
+        result["size"] = [max(0, size[0]), max(0, size[1])]
+
+        ref_offset = _as_pair(result.get("ref_offset"))
+        if ref_offset is not None:
+            result["ref_offset"] = [ref_offset[0], ref_offset[1]]
+        elif "ref_offset" in result:
+            del result["ref_offset"]
+
+        result["enabled"] = bool(result.get("enabled", True))
+        return result
 
     @staticmethod
     def list_games(base_dir: str) -> List[str]:
@@ -93,23 +217,23 @@ class ZoneProject:
         self.current_game = game_name
 
         folder = os.path.join(self.base_dir, game_name)
-        img_path = ZoneProject._find_expected_image(folder) or os.path.join(folder, "test_crop_result.png")
+        img_path = ZoneProject._find_expected_image(folder)
         coord_path = os.path.join(folder, "coordinates.json")
 
-        if not os.path.isfile(img_path):
-            raise FileNotFoundError(f"Image introuvable: {img_path}")
+        if not img_path or not os.path.isfile(img_path):
+            raise FileNotFoundError(f"Image introuvable: {img_path or folder}")
 
         self.image_path = img_path
         self.image = Image.open(img_path).convert("RGBA")
         W, H = self.image_size
         self.table_capture.clear()
-        self.table_capture.update({"enabled": True, "relative_bounds": [0, 0, W, H]})
+        self.table_capture.update(self._default_table_capture(W, H))
         self.templates.clear()
         self.regions.clear()
 
         data = _load_templated_json(coord_path) if os.path.isfile(coord_path) else None
         if data:
-            self.table_capture.update(data.get("table_capture", {}))
+            self.table_capture.update(self._normalise_table_capture(data.get("table_capture"), W, H))
             self.templates.update(data.get("templates", {}))
             regs = data.get("regions", {})
             for key, r in regs.items():
@@ -222,7 +346,7 @@ class ZoneProject:
     # ---------- Sauvegarde ----------
     def export_payload(self) -> Dict[str, Any]:
         W, H = self.image_size
-        tc = self.table_capture or {"enabled": True, "relative_bounds": [0, 0, W, H]}
+        tc = self._normalise_table_capture(self.table_capture, W, H)
         out = {"table_capture": tc, "templates": self.templates, "regions": {}}
         for key, r in self.regions.items():
             out["regions"][key] = {
