@@ -31,3 +31,12 @@ def test_cover_overlay_is_detected() -> None:
 
     with Image.open(cover_path) as cover_image:
         assert is_cover_me_cards(cover_image, threshold=0.55) is True
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    test_cover_overlay_is_detected()

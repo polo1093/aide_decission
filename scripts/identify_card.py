@@ -17,19 +17,16 @@ Usage minimal:
 Options utiles:
   --screens-dir   Dossier d’entrée (défaut: config/<jeu>/debug/screens)
   --strict        Score min (0-1) pour autoskip complet (def 0.985)
-  --trim          Bordure rognée (px) pour la sauvegarde & la reco (def 6)
+  --trim          Bordure rognée (px) pour reco & sauvegarde (def 6)
   --force-all     Forcer le dialog même si la reco est déjà suffisante
 """
+
+from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, Sequence, Tuple, Optional
-
-# ajoute le VRAI project root: .../aide_decission
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Compat OpenCV pour PyScreeze
 try:
@@ -44,11 +41,15 @@ else:
         if not hasattr(cv2, missing_attr) and hasattr(cv2, fallback_attr):
             setattr(cv2, missing_attr, getattr(cv2, fallback_attr))
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import numpy as np
 from PIL import Image
 
-from objet.services.card_identifier import CardIdentifier
-from objet.scanner.cards_recognition import is_cover_me_cards, is_card_present
+from objet.services.card_identifier import CardIdentifier, is_card_present
+from objet.scanner.cards_recognition import is_cover_me_cards
 from _utils import (
     CardPatch,
     collect_card_patches,
@@ -133,24 +134,17 @@ def _load_table_image(img_path: Path) -> Optional[Image.Image]:
 
 # ---------- helpers cartes / overlay ----------
 
+def _card_patch_present(card_patch: CardPatch) -> bool:
+    """Détection 'slot non vide' via la présence d'une carte."""
+    return is_card_present(card_patch.number, threshold=215, min_ratio=0.04)
+
+
 def _crop_region(table_img: Image.Image, region, offset: Tuple[int, int] = (0, 0)) -> Image.Image:
     """Retourne un crop PIL à partir d'une région de coordinates.json et d'un offset."""
     x, y = region.top_left
     w, h = region.size
     ox, oy = offset
     return table_img.crop((x + ox, y + oy, x + ox + w, y + oy + h))
-
-
-def _has_hold_overlay(has_cover_me: bool, card_patch: CardPatch) -> bool:
-    """Retourne True si l'overlay joueur est présent et que la carte appartient à la main."""
-    tpl_set = (card_patch.template_set or "").lower()
-    if not any(token in tpl_set for token in ("hand", "player")):
-        return False
-    return has_cover_me
-
-
-def _card_patch_present(card_patch: CardPatch) -> bool:
-    return is_card_present(card_patch.number, threshold=215, min_ratio=0.04)
 
 
 # ---------- CLI ----------
@@ -228,7 +222,7 @@ def main(argv: Sequence[str]) -> int:
         state_region = regions.get("player_state_me")
         if state_region is not None:
             state_patch = _crop_region(table_img, state_region, offset)
-            has_cover_me = is_cover_me_cards(state_patch, threshold=0.6)
+            has_cover_me = is_cover_me_cards(state_patch, threshold=0.55)
         else:
             has_cover_me = False
 
@@ -240,14 +234,21 @@ def main(argv: Sequence[str]) -> int:
             offset=offset,
         )
 
+        # Si overlay CHECK/PAIE/RELANCER/fold détecté → skip de toutes les cartes de cette capture
+        if has_cover_me:
+            nb_cards_present = sum(
+                1 for cp in card_pairs.values() if _card_patch_present(cp)
+            )
+            skipped_hold += nb_cards_present
+            print(
+                f"[SKIP] {img_path.name}: overlay joueur détecté (CHECK/PAIE/RELANCER/FOLD), "
+                f"{nb_cards_present} cartes ignorées"
+            )
+            continue
+
         for base_key, card_patch in card_pairs.items():
             if not _card_patch_present(card_patch):
                 skipped_empty += 1
-                continue
-
-            if _has_hold_overlay(has_cover_me, card_patch):
-                skipped_hold += 1
-                print(f"[SKIP] {img_path.name} {base_key}: overlay joueur détecté, carte ignorée")
                 continue
 
             total_cards += 1
@@ -261,7 +262,8 @@ def main(argv: Sequence[str]) -> int:
                 force_all=bool(args.force_all),
             )
 
-            src = res.meta.get("source")
+            src = (res.meta.get("source") or "").lower()
+
             if src == "auto":
                 auto_ok += 1
                 print(
@@ -276,13 +278,17 @@ def main(argv: Sequence[str]) -> int:
             elif src == "guess":
                 print(f"[GUESS] {img_path.name} {base_key} → {res.number}/{res.suit}")
             elif src == "delete":
+                # suppression physique de la capture problématique
                 try:
                     img_path.unlink()
                     print(f"[DELETE] {img_path.name} supprimée")
                 except OSError as e:
                     print(f"[DELETE-ERR] {img_path.name}: {e}")
-                # on arrête le traitement des cartes pour cette capture
+                # on arrête le traitement des autres cartes de cette capture
                 break
+            else:
+                # debug si un nouveau source apparaît
+                print(f"[DEBUG] {img_path.name} {base_key}: source inattendue {src!r}")
 
     print("==== RÉSUMÉ ====")
     print(f"Cartes vues              : {total_cards}")

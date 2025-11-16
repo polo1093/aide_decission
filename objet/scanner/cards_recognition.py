@@ -375,7 +375,24 @@ def recognize_card_observation(
 
 
 
+def _ensure_pil_image(region):
+    """Accepte PIL.Image ou np.ndarray et renvoie toujours une PIL.Image."""
+    if isinstance(region, Image.Image):
+        return region
 
+    if isinstance(region, np.ndarray):
+        arr = region
+        if arr.ndim == 2:
+            # image grayscale
+            return Image.fromarray(arr.astype("uint8"), mode="L")
+        if arr.ndim == 3:
+            # typiquement BGR venant de cv2 → on repasse en RGB
+            if arr.shape[2] >= 3:
+                rgb = arr[..., ::-1]  # BGR -> RGB
+                return Image.fromarray(rgb.astype("uint8"), mode="RGB")
+        raise ValueError(f"Unsupported numpy array shape for image: {arr.shape!r}")
+
+    raise TypeError(f"Unsupported region type: {type(region)!r}")
 
 
 
@@ -401,6 +418,7 @@ def _load_is_cover_me_cards_template(path) -> Optional[Image.Image]:
 def is_cover_me_cards(region: Image.Image,threshold: float = 0.55,) -> bool:
     """Return ``True`` when the *fold* overlay is detected inside ``patch``."""
     # haystack = région où on cherche (player_state_me), en niveaux de gris
+    region = _ensure_pil_image(region)
     haystack_rgb = region.convert("RGB")
     haystack_gray = cv2.cvtColor(np.array(haystack_rgb), cv2.COLOR_RGB2GRAY)
 

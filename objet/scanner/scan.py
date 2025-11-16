@@ -11,7 +11,8 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
+    
+import pyautogui
 from objet.utils.pyauto import locate_in_image
 from objet.utils.calibration import bbox_from_region, load_coordinates
 from objet.scanner.cards_recognition import (
@@ -82,15 +83,15 @@ class ScanTable:
             return False
 
         # 1) Localiser l'ancre dans le plein écran via pyautogui
-        box = locate_in_image(
-            haystack=self.screen_array,
-            needle=self.reference_pil,
-            assume_bgr=True,
-            grayscale=grayscale,
-            confidence=confidence,
-        )
-
-        if box is None:
+        try:
+            box = locate_in_image(
+                haystack=self.screen_array,
+                needle=self.reference_pil,
+                assume_bgr=True,
+                grayscale=grayscale,
+                confidence=confidence,
+            )
+        except pyautogui.ImageNotFoundException:
             self.scan_string = "don't find"
             self.anchor_box = None
             return False

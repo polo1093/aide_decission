@@ -29,7 +29,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-    
 import tkinter as tk
 import customtkinter as ctk
 from PIL import Image, ImageTk
@@ -103,6 +102,8 @@ class _SingleCardDialog:
         self.root.title("Identifier la carte")
         self.root.geometry("560x480")
 
+        # action: "ok" | "cancel" | "delete"
+        self.action: str = "cancel"
         self.result: Optional[Tuple[str, str]] = None
 
         # Valeurs par défaut (y compris si le champ n’est pas affiché)
@@ -146,14 +147,24 @@ class _SingleCardDialog:
 
         btns = ctk.CTkFrame(top)
         btns.pack(pady=10)
-        ctk.CTkButton(btns, text="Valider", command=self._on_save).pack(side="left", padx=8)
-        ctk.CTkButton(btns, text="Annuler", command=self._on_cancel).pack(side="left", padx=8)
+
+        ctk.CTkButton(btns, text="Valider", command=self._on_save).pack(
+            side="left", padx=8
+        )
+        ctk.CTkButton(btns, text="Annuler", command=self._on_cancel).pack(
+            side="left", padx=8
+        )
+        # Nouveau bouton Delete
+        ctk.CTkButton(btns, text="Delete", command=self._on_delete).pack(
+            side="left", padx=8
+        )
 
     def run(self) -> Optional[Tuple[str, str]]:
         self.root.mainloop()
         return self.result
 
     def _on_save(self) -> None:
+        self.action = "ok"
         self.result = (
             self.number_var.get().strip() or "?",
             self.suit_var.get().strip() or "?",
@@ -161,6 +172,13 @@ class _SingleCardDialog:
         self.root.destroy()
 
     def _on_cancel(self) -> None:
+        self.action = "cancel"
+        self.result = None
+        self.root.destroy()
+
+    def _on_delete(self) -> None:
+        # signale qu’on veut supprimer la capture
+        self.action = "delete"
         self.result = None
         self.root.destroy()
 
@@ -344,6 +362,18 @@ class CardIdentifier:
             suggested_suit=suit_s,
         )
         out = dialog.run()
+        action = dialog.action  # "ok" | "cancel" | "delete"
+
+        # 2.a Delete → laisse identify_card.py gérer la suppression physique
+        if action == "delete":
+            return IdentifyResult(
+                "?", "?",
+                {
+                    "source": "delete",
+                    "score_number": score_num,
+                    "score_suit": score_suit,
+                },
+            )
 
         if out is None:
             # Annulé → renvoyer la meilleure info disponible

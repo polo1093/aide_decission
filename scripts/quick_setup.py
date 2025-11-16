@@ -299,4 +299,5 @@ def _report_missing_cards(game_dir: Path) -> None:
 
 
 if __name__ == "__main__":
+    _report_missing_cards(PROJECT_ROOT / "config" / "PMU")
     raise SystemExit(main())
