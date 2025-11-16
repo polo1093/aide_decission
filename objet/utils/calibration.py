@@ -139,6 +139,22 @@ def resolve_templates(templates: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]
     return resolved
 
 
+def _infer_template_set_from_key(key: str, group: str) -> Optional[str]:
+    """Best-effort template-set inference based on the region name/group."""
+
+    key_l = key.lower()
+    group_l = group.lower()
+    tokens = (key_l, group_l)
+    for text in tokens:
+        if "card" not in text:
+            continue
+        if any(hint in text for hint in ("player", "hand", "hero", "me")):
+            return "hand"
+        if any(hint in text for hint in ("board", "community", "table")):
+            return "board"
+    return None
+
+
 def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping[str, Dict[str, Any]]) -> Region:
     group = str(raw.get("group", ""))
     top_left = raw.get("top_left", [0, 0])
@@ -162,6 +178,10 @@ def _normalise_region_entry(key: str, raw: Mapping[str, Any], templates: Mapping
     if len(size_list) >= 2:
         size[1] = coerce_int(size_list[1])
     meta = {k: v for k, v in raw.items() if k not in {"group", "top_left", "size"}}
+    if "template_set" not in meta:
+        inferred = _infer_template_set_from_key(key, group)
+        if inferred:
+            meta["template_set"] = inferred
     return Region(
         key=key,
         group=group,

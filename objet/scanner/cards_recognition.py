@@ -127,8 +127,10 @@ class TemplateIndex:
         numbers = self.numbers_by_set.get(key, {})
         suits = self.suits_by_set.get(key, {})
         if not numbers and not suits and template_set:
-            # Ensemble explicitement demandé mais vide → pas de fallback implicite.
-            return {}, {}
+            # Aucun template pour cet ensemble → fallback silencieux sur le défaut.
+            key = self.default_set
+            numbers = self.numbers_by_set.get(key, {})
+            suits = self.suits_by_set.get(key, {})
         return numbers, suits
 
     def available_sets(self) -> List[str]:
