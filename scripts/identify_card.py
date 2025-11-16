@@ -134,9 +134,37 @@ def _load_table_image(img_path: Path) -> Optional[Image.Image]:
 
 # ---------- helpers cartes / overlay ----------
 
+_HAND_HINTS = ("hand", "player", "hero", "me")
+_BOARD_HINTS = ("board", "community", "table")
+
+
 def _card_patch_present(card_patch: CardPatch) -> bool:
     """Détection 'slot non vide' via la présence d'une carte."""
     return is_card_present(card_patch.number, threshold=215, min_ratio=0.04)
+
+
+def _infer_template_set_from_key(base_key: str) -> Optional[str]:
+    key = base_key.lower()
+    if any(hint in key for hint in _HAND_HINTS):
+        return "hand"
+    if any(hint in key for hint in _BOARD_HINTS):
+        return "board"
+    return None
+
+
+def _normalise_template_set(card_patch: CardPatch, base_key: str) -> Optional[str]:
+    if card_patch.template_set:
+        return card_patch.template_set
+    return _infer_template_set_from_key(base_key)
+
+
+def _is_hand_slot(template_set: Optional[str]) -> bool:
+    if not template_set:
+        return False
+    lower = template_set.lower()
+    if any(hint in lower for hint in _BOARD_HINTS):
+        return False
+    return any(hint in lower for hint in _HAND_HINTS) or not lower
 
 
 def _crop_region(table_img: Image.Image, region, offset: Tuple[int, int] = (0, 0)) -> Image.Image:
@@ -234,21 +262,17 @@ def main(argv: Sequence[str]) -> int:
             offset=offset,
         )
 
-        # Si overlay CHECK/PAIE/RELANCER/fold détecté → skip de toutes les cartes de cette capture
-        if has_cover_me:
-            nb_cards_present = sum(
-                1 for cp in card_pairs.values() if _card_patch_present(cp)
-            )
-            skipped_hold += nb_cards_present
-            print(
-                f"[SKIP] {img_path.name}: overlay joueur détecté (CHECK/PAIE/RELANCER/FOLD), "
-                f"{nb_cards_present} cartes ignorées"
-            )
-            continue
-
+        overlay_skipped = 0
         for base_key, card_patch in card_pairs.items():
+            tpl_set = _normalise_template_set(card_patch, base_key)
+
             if not _card_patch_present(card_patch):
                 skipped_empty += 1
+                continue
+
+            if has_cover_me and _is_hand_slot(tpl_set):
+                skipped_hold += 1
+                overlay_skipped += 1
                 continue
 
             total_cards += 1
@@ -257,7 +281,7 @@ def main(argv: Sequence[str]) -> int:
                 card_patch.number,
                 card_patch.suit,
                 base_key=base_key,
-                template_set=card_patch.template_set,
+                template_set=tpl_set,
                 interactive=True,
                 force_all=bool(args.force_all),
             )
@@ -289,6 +313,11 @@ def main(argv: Sequence[str]) -> int:
             else:
                 # debug si un nouveau source apparaît
                 print(f"[DEBUG] {img_path.name} {base_key}: source inattendue {src!r}")
+
+        if overlay_skipped:
+            print(
+                f"[SKIP] {img_path.name}: overlay joueur détecté, {overlay_skipped} carte(s) main ignorées"
+            )
 
     print("==== RÉSUMÉ ====")
     print(f"Cartes vues              : {total_cards}")
