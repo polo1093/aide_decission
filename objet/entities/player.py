@@ -41,8 +41,8 @@ class Players:
         regions, templates_resolved, _ = load_coordinates(self.coord_path)
         if not self.player:
             self.player = [ Player(
-                coordonate_money=bbox_from_region(regions.get(f"player_{i}_money")),
-                coordonate_etat=bbox_from_region(regions.get(f"player_{i}_etat")),
+                coordonate_money=bbox_from_region(regions.get(f"player_money_J{i}")),
+                coordonate_etat=bbox_from_region(regions.get(f"player_state_J{i}")),
                 ) for i in range(1,6)]
     
     def __iter__(self) -> Iterator[Player]:
@@ -72,14 +72,12 @@ class Player:
     coordonate_etat: Optional[tuple[int, int, int, int]] = None
     active_at_start: bool = True  # Indique si le joueur était actif au début de la main pas utiliser
     fond_start_Party: Optional[float] = 0
-    fond = Fond(coordinates_value=coordonate_money)
+    fond: Fond = field(default_factory=Fond)
     etat : str = "play"
     etat_modified_this_round : bool = False
     
-    def __init__(self):
-        pass
-    
-    # def
+    def __post_init__(self) -> None:
+        self.fond.coordinates_value = self.coordonate_money
 
 
     def is_activate(self) -> bool:
@@ -139,9 +137,11 @@ class Player:
 
 
 if __name__ == "__main__":
+    ps = Players()
     p=Player()
     print(p)
     print(p.is_activate())
+    print(ps.player[0])
     
 
 __all__ = ["Player"]

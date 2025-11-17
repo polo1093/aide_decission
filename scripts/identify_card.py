@@ -58,7 +58,7 @@ from _utils import (
     table_capture_origin,
 )
 
-DEFAULT_ACCEPT_THRESHOLD = 0.92
+DEFAULT_ACCEPT_THRESHOLD = 0.95
 
 
 # ---------- helpers fichiers / ancre ----------

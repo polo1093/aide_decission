@@ -65,8 +65,8 @@ class Controller:
         # Informations sur le board
         board_cards_str = [card.formatted for card in self.game.table.cards.board_cards()]
         
-        player_scan = [f"J{i+1} active={player.is_activate()} : {player.fond}   "
-                    for i, player in enumerate(self.game.table.players)]
+        player_scan = [i for i in[f"J{i+1} "+( "🟢" if player.is_activate() else "⚪")+f" : {player.fond} "
+                    for i, player in enumerate(self.game.table.players)]]
 
         # Informations sur les boutons
         # buttons_info = []
@@ -102,7 +102,7 @@ class Controller:
             f"Live poker scanner\n"
             f"Mes cartes: {me_cards_str}\n"
             f"Cartes sur le board: {board_cards_str}\n"
-            f"{player_scan}"
+            f"{player_scan}\n"
             f"{'=' * 30}ETAT{'=' * 30}\n"
             f"Mes cartes: {etat_me_cards_str}\n"
             f"Cartes sur le board: {etat_board_cards_str}\n"

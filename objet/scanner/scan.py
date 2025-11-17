@@ -21,6 +21,7 @@ from objet.scanner.cards_recognition import (
     is_card_present,
     recognize_number_and_suit,is_cover
 )
+from objet.scanner.amount_ocr import OcrEngine
 
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 DEFAULT_ANCHOR_PATH = Path("config/PMU/anchor.png")
@@ -54,7 +55,7 @@ class ScanTable:
         
         regions, _, _ = load_coordinates(self.coord_path)
         self.player_state_boxes = bbox_from_region(regions.get("player_state_me"))
-        
+        self.ocr =  OcrEngine()
 
         # Première capture
         self.screen_refresh()
@@ -137,6 +138,26 @@ class ScanTable:
             return None, None, 0.0, 0.0
 
         if is_card_present(image_card_value):
+            
+            
+            
+            # img = image_card_value  # BGR
+
+            # if isinstance(img, np.ndarray):
+            #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            #     Image.fromarray(rgb).show()
+            # elif isinstance(img, Image.Image):
+            #     img.show()
+            # img = image_card_suit  # BGR
+
+            # if isinstance(img, np.ndarray):
+            #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            #     Image.fromarray(rgb).show()
+            # elif isinstance(img, Image.Image):
+            #     img.show()
+                
+                
+        
             carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(
                 image_card_value,
                 image_card_suit,
@@ -171,19 +192,18 @@ class ScanTable:
         return False
 
 
- 
-    
-    # Stubs à compléter plus tard
-    def scan_pot(self, position):
-        return None
+
 
     def scan_player(self, position_money,position_etat):
         etat = is_etat_player(self._extract_patch(position_etat))
-        return etat, self.scan_money_player( position_money)
+        value = self.scan_money( position_money)       
+        return etat, value
 
-    def scan_money_player(self, position):
-        self._extract_patch(position)
-        return None
+    def scan_money(self, position):
+        img = self._extract_patch(position)
+        value, confidence, raw_text = self.ocr.read_amount(img)      
+        return 0.0  if value is None else value
+
 
     def scan_bouton(self, position):
         return None, None

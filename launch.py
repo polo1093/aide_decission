@@ -27,7 +27,7 @@ from objet.services.controller import Controller   # <--- IMPORTANT : import dir
 
 
 class App(tk.Tk):
-    def __init__(self, controller: Controller, scan_interval_ms: int = 250):
+    def __init__(self, controller: Controller, scan_interval_ms: int = 1000):
         super().__init__()
 
         self.title("Live Table – Controller UI")
@@ -126,7 +126,7 @@ class App(tk.Tk):
             v = int(self.var_interval.get())
             self.scan_interval_ms = max(25, min(2000, v))
         except Exception:
-            self.scan_interval_ms = 250
+            self.scan_interval_ms = 1000
             self.var_interval.set(str(self.scan_interval_ms))
 
     # ---------- Orchestration ----------

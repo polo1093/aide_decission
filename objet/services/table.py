@@ -49,12 +49,11 @@ class Table:
             value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
                 position_value=card.card_coordinates_value,
                 position_suit=card.card_coordinates_suit,
-                template_set=card.template_set,
-                fold_state_key="player_state_me",
+                template_set=card.template_set
             )
-            if value is not None or suit is not None:
-                if value != card.value and suit != card.suit:
-                    self.New_Party()
+            # if value is not None or suit is not None:
+            #     if value != card.value and suit != card.suit:
+            #         self.New_Party()
             card.apply_observation(
                 value=value,
                 suit=suit,
@@ -77,22 +76,18 @@ class Table:
                     value_score=confidence_value,
                     suit_score=confidence_suit,
                 )
-        # for player in self.players.player:
-        #     etat , 
+        for player in self.players.player:
+            etat , money = self.scan.scan_player(
+                position_money= player.fond.coordinates_value,
+                position_etat= player.coordonate_etat )
+            player.apply_scan(etat,money)
+            
             
             
 
                 
-        # self.scan.scan_pot()
-        
-        # self.scan.scan_player()
-        #    def scan_etat(self) -> Optional[str]:
-        # # TODO Il faut découper l'image en fonction de ses coordonnées. 
-        # return is_etat_player(region=self.coordonate_etat, threshold=0.7)
-    
-        #     def scan_money(self) -> Optional[float]:
-        #         TODO
-        #         return 1
+        self.pot.amount = self.scan.scan_money(self.pot.coordinates_value)
+
     
 
 

@@ -68,7 +68,7 @@
       },
       "size": [
         50,
-        30
+        31
       ]
     },
     "player_card_symbol": {
@@ -77,8 +77,8 @@
         "lock_same_y": true
       },
       "size": [
-        45,
-        45
+        50,
+        50
       ]
     },
     "player_state": {
@@ -174,8 +174,8 @@
     "player_state_me": {
       "group": "player_state",
       "top_left": [
-        1136,
-        773
+        2067,
+        562
       ],
       "value": null,
       "label": "player_state_me"
@@ -219,8 +219,8 @@
     "player_state_J5": {
       "group": "player_state",
       "top_left": [
-        1484,
-        713
+        1133,
+        779
       ],
       "value": null,
       "label": "player_state_J5"
@@ -228,8 +228,8 @@
     "player_card_1_number": {
       "group": "player_card_number",
       "top_left": [
-        1200,
-        862
+        1198,
+        861
       ],
       "value": null,
       "label": "player_card_1_number"
@@ -237,8 +237,8 @@
     "player_card_2_number": {
       "group": "player_card_number",
       "top_left": [
-        1286,
-        862
+        1283,
+        861
       ],
       "value": null,
       "label": "player_card_2_number"
@@ -246,8 +246,8 @@
     "player_card_1_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        1228,
-        915
+        1223,
+        911
       ],
       "value": null,
       "label": "player_card_1_symbol"
@@ -255,8 +255,8 @@
     "player_card_2_symbol": {
       "group": "player_card_symbol",
       "top_left": [
-        1313,
-        915
+        1308,
+        911
       ],
       "value": null,
       "label": "player_card_2_symbol"
