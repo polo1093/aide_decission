@@ -11,8 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from objet.entities.player import Fond , Players
-from objet.state import ButtonsState, CaptureState, CardsState
+from objet.entities.player import Fond , Players ,Buttons
+from objet.state import  CaptureState, CardsState
 from objet.scanner.scan import ScanTable
 from objet.utils.calibration import load_coordinates, bbox_from_region
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
@@ -26,7 +26,7 @@ class Table:
     
     coord_path: Path | str = DEFAULT_COORD_PATH
     cards: CardsState = field(default_factory=CardsState)
-    buttons: ButtonsState = field(default_factory=ButtonsState)
+    buttons: Buttons = field(default_factory=Buttons)
     captures: CaptureState = field(default_factory=CaptureState)
     scan: ScanTable = field(default_factory=ScanTable)
     pot: Fond = field(default_factory=Fond)
