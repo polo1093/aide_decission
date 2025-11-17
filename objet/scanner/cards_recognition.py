@@ -404,13 +404,14 @@ ACTIONS_DIR = Path(__file__).resolve().parents[2] / "config" / "PMU"
 
 ACTION_TEMPLATES: Dict[str, Path] = {
     "CHECK": ACTIONS_DIR / "CHECK.png",
-    "PAIE": ACTIONS_DIR / "PAIE.png",
+    "paid": ACTIONS_DIR / "PAIE.png",
     "RELANCER": ACTIONS_DIR / "RELANCER.png",
     "fold": ACTIONS_DIR / "fold.png",
 }
  
 
-@lru_cache(maxsize=len(ACTION_TEMPLATES))
+
+@lru_cache(maxsize=len(ACTION_TEMPLATES)+1)
 def _load_is_cover_me_cards_template(path) -> Optional[Image.Image]:
     """Load the reference template used to detect the FOLD overlay."""
     with Image.open(path) as img:
@@ -423,27 +424,38 @@ def is_cover_me_cards(region: Image.Image,threshold: float = 0.55,) -> bool:
     region = _ensure_pil_image(region)
     haystack_rgb = region.convert("RGB")
     haystack_gray = cv2.cvtColor(np.array(haystack_rgb), cv2.COLOR_RGB2GRAY)
-
-    # img = haystack_rgb
-    # if isinstance(img, np.ndarray):
-    #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #     Image.fromarray(rgb).show()
-    # elif isinstance(img, Image.Image):
-    #     img.show()
-    # else:
-    #     print("Type d'image inattendu:", type(img))
-    
+    ACTION_TEMPLATES.pop("paid", None)
     for path in ACTION_TEMPLATES.values():
-        template_rgb = _load_is_cover_me_cards_template(path)
-        template_gray = cv2.cvtColor(np.array(template_rgb), cv2.COLOR_RGB2GRAY)
-
-        # matchTemplate → carte de scores normalisés
-        res = cv2.matchTemplate(haystack_gray, template_gray, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-
-        # max_val est la "confidence" [0, 1]
-        if max_val >= threshold:
+        if is_cover(haystack_gray, path, threshold):
             return True
+    return False
+
+def is_etat_player(region: Image.Image,threshold: float = 0.55,) -> bool:
+    """Return  *fold* overlay is detected inside ``patch``."""
+    # haystack = région où on cherche (player_state_me), en niveaux de gris
+    region = _ensure_pil_image(region)
+    haystack_rgb = region.convert("RGB")
+    haystack_gray = cv2.cvtColor(np.array(haystack_rgb), cv2.COLOR_RGB2GRAY)
+    for action_name, path in ACTION_TEMPLATES.items():
+        if is_cover(haystack_gray, path, threshold):
+            return action_name
     return False
     
     
+def is_cover(screen_array: np.ndarray, template_path: Path, threshold: float = 0.55,) -> bool:
+    """Return ``True`` when the *fold* overlay is detected inside ``patch``."""
+    # haystack = région où on cherche (player_state_me), en niveaux de gris
+    haystack_rgb = cv2.cvtColor(screen_array, cv2.COLOR_BGR2RGB)
+    haystack_gray = cv2.cvtColor(haystack_rgb, cv2.COLOR_RGB2GRAY)
+
+    template_rgb = _load_is_cover_me_cards_template(template_path)
+    template_gray = cv2.cvtColor(np.array(template_rgb), cv2.COLOR_RGB2GRAY)
+
+    # matchTemplate → carte de scores normalisés
+    res = cv2.matchTemplate(haystack_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, _ = cv2.minMaxLoc(res)
+
+    # max_val est la "confidence" [0, 1]
+    if max_val >= threshold:
+        return True
+    return False

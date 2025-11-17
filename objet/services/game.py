@@ -25,11 +25,34 @@ from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 LOGGER = logging.getLogger(__name__)
 
 
+
+@dataclass
+class etat:
+    """Stocke l'état courant de la table et calcule les décisions."""
+    cards : CardsState = field(default_factory=CardsState)
+    
+    def __post_init__(self) -> None:
+        """Garantit que les états dépendants existent."""
+        self.cards = CardsState()
+        
+    def update_cards_state(self, cards_state: CardsState) -> None:
+        """Met à jour l'état des cartes."""
+        for i,card in enumerate(cards_state.board):
+            if card.formatted == self.cards.board[i].formatted or card.formatted is None:
+                continue
+            self.cards.board[i] = card
+        for i,card in enumerate(cards_state.me):
+            if card.formatted == self.cards.me[i].formatted or card.formatted is None:
+                continue
+            self.cards.me[i] = card
+        
+    
+
 @dataclass
 class Game:
     """Stocke l'état courant de la table et calcule les décisions."""
 
-    
+    etat: etat = field(default_factory=etat)
     table: Table = field(default_factory=Table)
     metrics: MetricsState = field(default_factory=MetricsState)
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
@@ -37,34 +60,14 @@ class Game:
 
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
-        if not isinstance(self.table.cards, CardsState):
-            self.table.cards = CardsState()
-        if not hasattr(self.table, "buttons") or not isinstance(self.table.buttons, ButtonsState):
-            self.table.buttons = ButtonsState()
-        if not hasattr(self.table, "captures") or not isinstance(self.table.captures, CaptureState):
-            self.table.captures = CaptureState()
+        self.table.cards = CardsState()
+        self.table.buttons = ButtonsState()
+        self.table.captures = CaptureState()
+        
 
-    # ---- Fabriques ---------------------------------------------------
-    @classmethod
-    def for_script(cls, script_name: str) -> "Game":
-        """Construit un état de jeu léger pour un script donné."""
 
-        game = cls()
-        name = Path(script_name).name
-        usage = SCRIPT_STATE_USAGE.get(name)
-        if not usage:
-            return game
 
-        portions = usage.portions
-        if StatePortion.CARDS not in portions:
-            game.table.cards = CardsState()
-        if StatePortion.BUTTONS not in portions:
-            game.table.buttons = ButtonsState()
-        if StatePortion.CAPTURES not in portions:
-            game.table.captures = CaptureState()
-        return game
-
-    # ---- Accès pratiques --------------------------------------------
+    
     @property
     def cards(self) -> CardsState:
         return self.table.cards
@@ -86,38 +89,11 @@ class Game:
     def update_from_scan(self) -> None:
         """Met à jour l'état du jeu à partir du dernier scan."""
         # TODO: compléter lorsque les métriques / boutons seront branchés
+        
+        self.etat.update_cards_state(self.table.cards)
         return None
 
-    def update_from_capture(
-        self,
-        *,
-        table_capture: Optional[Mapping[str, Any]] = None,
-        regions: Optional[Mapping[str, Any]] = None,
-        templates: Optional[Mapping[str, Any]] = None,
-        reference_path: Optional[str] = None,
-    ) -> None:
-        """Injecte des paramètres de capture dans l'état courant."""
 
-        self.table.captures.update_from_coordinates(
-            table_capture=table_capture,
-            regions=regions,
-            templates=templates,
-            reference_path=reference_path,
-        )
-
-    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
-        """Enregistre une observation de carte pour inspection ultérieure."""
-
-        card = Card()
-        card.apply_observation(
-            observation.value,
-            observation.suit,
-            observation.value_score,
-            observation.suit_score,
-        )
-        self.table.captures.record_observation(base_key, card)
-   
-   
    
 
 
@@ -154,36 +130,56 @@ class Game:
         players = max(1, int(self.metrics.players_count or 1))
         return chance_win * (self.metrics.pot + (mise * (players + 1))) - (1 - chance_win) * mise
 
-    # ---- Diagnostics -------------------------------------------------
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "workflow": self.workflow,
-            "cards": self.table.cards.as_strings(),
-            "buttons": {
-                name: {
-                    "name": btn.name,
-                    "value": btn.value,
-                    "gain": btn.gain,
-                }
-                for name, btn in self.table.buttons.buttons.items()
-            },
-            "metrics": {
-                "pot": self.metrics.pot,
-                "fond": self.metrics.fond,
-                "chance_win_0": self.metrics.chance_win_0,
-                "chance_win_x": self.metrics.chance_win_x,
-                "player_money": self.metrics.player_money,
-                "players_count": self.metrics.players_count,
-            },
-            "capture": {
-                "table_capture": self.table.captures.table_capture,
-                "regions": self.table.captures.regions,
-                "templates": self.table.captures.templates,
-                "reference_path": self.table.captures.reference_path,
-            },
-        }
 
 
+    def update_from_capture(
+        self,
+        *,
+        table_capture: Optional[Mapping[str, Any]] = None,
+        regions: Optional[Mapping[str, Any]] = None,
+        templates: Optional[Mapping[str, Any]] = None,
+        reference_path: Optional[str] = None,
+    ) -> None:
+        """Injecte des paramètres de capture dans l'état courant."""
+
+        self.table.captures.update_from_coordinates(
+            table_capture=table_capture,
+            regions=regions,
+            templates=templates,
+            reference_path=reference_path,
+        )
+
+    def add_card_observation(self, base_key: str, observation: CardObservation) -> None:
+        """Enregistre une observation de carte pour inspection ultérieure."""
+
+        card = Card()
+        card.apply_observation(
+            observation.value,
+            observation.suit,
+            observation.value_score,
+            observation.suit_score,
+        )
+        self.table.captures.record_observation(base_key, card)
+        
+    @classmethod
+    def for_script(cls, script_name: str) -> "Game":
+        """Construit un état de jeu léger pour un script donné."""
+
+        game = cls()
+        name = Path(script_name).name
+        usage = SCRIPT_STATE_USAGE.get(name)
+        if not usage:
+            return game
+
+        portions = usage.portions
+        if StatePortion.CARDS not in portions:
+            game.table.cards = CardsState()
+        if StatePortion.BUTTONS not in portions:
+            game.table.buttons = ButtonsState()
+        if StatePortion.CAPTURES not in portions:
+            game.table.captures = CaptureState()
+        return game
+   
 
 __all__ = [
     "Game",

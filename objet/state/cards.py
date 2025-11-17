@@ -93,10 +93,7 @@ class CardsState:
         for card in self.me + self.board:
             card.reset()
             
-if __name__ == "__main__":
-    # Petit stub de test local
-    cards_state = CardsState()
-    print(cards_state.me[0])
+
 
 __all__ = ["CardsState"]
 def _template_set_from_region(region: Optional[Region]) -> Optional[str]:
@@ -119,3 +116,8 @@ def _template_set_for_card(
         return tpl
     return _template_set_from_region(regions.get(symbol_key))
 
+
+if __name__ == "__main__":
+    # Petit stub de test local
+    cards_state = CardsState()
+    print(cards_state.board[0])

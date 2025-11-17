@@ -17,14 +17,15 @@ from objet.utils.pyauto import locate_in_image
 from objet.utils.calibration import bbox_from_region, load_coordinates
 from objet.scanner.cards_recognition import (
     TemplateIndex,
-    is_cover_me_cards,
+    is_cover_me_cards, is_etat_player,
     is_card_present,
-    recognize_number_and_suit,
+    recognize_number_and_suit,is_cover
 )
 
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 DEFAULT_ANCHOR_PATH = Path("config/PMU/anchor.png")
 DEFAULT_CARDS_ROOT = Path("config/PMU/Cards")
+DEFAULT_LOSE_PATH = Path("config/PMU/lose.png")
 
 
 class ScanTable:
@@ -42,22 +43,30 @@ class ScanTable:
         self.reference_pil: Image.Image = Image.open(DEFAULT_ANCHOR_PATH).convert("RGB")
 
         # --- État runtime ---
+        self.value_threshold = value_threshold
+        self.suit_threshold = suit_threshold
         self.screen_array: Optional[np.ndarray] = None     # plein écran, BGR
         self.anchor_box: Optional[Tuple[int, int, int, int]] = None
         self.scan_string: str = "init"
         self.cards_root = DEFAULT_CARDS_ROOT
         self.template_index = TemplateIndex(self.cards_root)
         self.template_index.load()
-        self.player_state_boxes: Dict[str, Tuple[int, int, int, int]] = {}
-        self._load_player_state_regions()
-        self.set_thresholds(value_threshold=value_threshold, suit_threshold=suit_threshold)
+        
+        regions, _, _ = load_coordinates(self.coord_path)
+        self.player_state_boxes = bbox_from_region(regions.get("player_state_me"))
+        
+
         # Première capture
         self.screen_refresh()
+        
 
+        
 
     
     def test_scan(self) -> bool:
         self.screen_refresh()
+        if self.is_lose():
+            sys.exit("You lose")
         return self.find_table()
     
     def screen_refresh(self) -> None:
@@ -104,11 +113,6 @@ class ScanTable:
     # ------------------------------------------------------------------
     # Scan des cartes directement sur la capture plein écran
     # ------------------------------------------------------------------
-    def set_thresholds(self, *, value_threshold: float, suit_threshold: float) -> None:
-        """Définit les seuils de similarité (0-1) utilisés pour valider valeur et symbole."""
-
-        self.value_threshold = float(max(0.0, min(1.0, value_threshold)))
-        self.suit_threshold = float(max(0.0, min(1.0, suit_threshold)))
 
     def scan_carte(
         self,
@@ -116,7 +120,6 @@ class ScanTable:
         position_suit: Tuple[int, int, int, int],
         *,
         template_set: Optional[str] = None,
-        fold_state_key: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[str], float, float]:
         """
         Retourne:
@@ -125,14 +128,12 @@ class ScanTable:
         - value, suit : str ou None
         - confidence_* : float entre 0.0 et 1.0
         """
-
-
         # crops séparés pour la valeur et le symbole
         image_card_value = self._extract_patch(position_value)
         image_card_suit = self._extract_patch(position_suit)
 
 
-        if self._should_skip_for_fold(image_card_value, template_set, fold_state_key):
+        if template_set == "hand" and self._should_skip_for_fold(image_card_value):
             return None, None, 0.0, 0.0
 
         if is_card_present(image_card_value):
@@ -152,53 +153,13 @@ class ScanTable:
             return value_ok, suit_ok, conf_val, conf_suit
         return None, None, 0.0, 0.0
 
-    def _load_player_state_regions(self) -> None:
-        try:
-            regions, _, _ = load_coordinates(self.coord_path)
-        except FileNotFoundError:
-            logging.getLogger(__name__).warning(
-                "Fichier de coordonnées introuvable pour la détection FOLD: %s",
-                self.coord_path,
-            )
-            return
-        except Exception as exc:
-            logging.getLogger(__name__).warning(
-                "Échec du chargement des coordonnées pour la détection FOLD: %s",
-                exc,
-            )
-            return
 
-        for key, region in regions.items():
-            if not key.startswith("player_state"):
-                continue
-            box = bbox_from_region(region)
-            if box:
-                self.player_state_boxes[key] = box
 
-    def _should_skip_for_fold(
-        self,
-        number_patch: np.ndarray,
-        template_set: Optional[str],
-        fold_state_key: Optional[str],
-    ) -> bool:
-        candidates: List[Union[np.ndarray, Image.Image]] = []
-
-        if fold_state_key:
-            box = self.player_state_boxes.get(fold_state_key)
-            if box is not None:
-                state_patch = self._extract_patch(box, pad=0)
-                if self._patch_has_pixels(state_patch):
-                    candidates.append(state_patch)
-
-        template_hint = (template_set or "").lower()
-        if not candidates and any(token in template_hint for token in ("hand", "player")):
-            if self._patch_has_pixels(number_patch):
-                candidates.append(number_patch)
-
-        for patch in candidates:
-            if is_cover_me_cards(patch, threshold=0.6):
-                return True
-        return False
+    def _should_skip_for_fold(self,number_patch: np.ndarray) -> bool:
+        state_patch = self._extract_patch(self.player_state_boxes, pad=0)
+        return  is_cover_me_cards(state_patch, threshold=0.6)
+        
+       
 
     @staticmethod
     def _patch_has_pixels(patch: Union[np.ndarray, Image.Image]) -> bool:
@@ -216,16 +177,24 @@ class ScanTable:
     def scan_pot(self, position):
         return None
 
-    def scan_player(self, position):
-        return None, None
+    def scan_player(self, position_money,position_etat):
+        etat = is_etat_player(self._extract_patch(position_etat))
+        return etat, self.scan_money_player( position_money)
 
     def scan_money_player(self, position):
+        self._extract_patch(position)
         return None
 
     def scan_bouton(self, position):
         return None, None
 
 
+    def is_lose(self) -> bool:
+        return is_cover(self.screen_array, DEFAULT_LOSE_PATH)
+        
+        
+        
+        
     def _extract_patch(self, box: Tuple[int, int, int, int], pad: int = 3) -> np.ndarray:
         """Retourne un crop (numpy BGR) pour ``box=(x,y,w,h)`` avec padding et clamp."""
 

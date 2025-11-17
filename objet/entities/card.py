@@ -51,13 +51,6 @@ class Card:
         suit_score: Optional[float] = None,
     ) -> None:
         """Applique une nouvelle observation et met à jour ."""
-        LOGGER.debug(
-            "apply_observation( value=%s, suit=%s, value_score=%s, suit_score=%s)",
-            value,
-            suit,
-            value_score,
-            suit_score,
-        )
         self.value = value
         self.suit = suit
         self.value_score = value_score

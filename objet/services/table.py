@@ -11,29 +11,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from objet.entities.player import Fond , Players
 from objet.state import ButtonsState, CaptureState, CardsState
 from objet.scanner.scan import ScanTable
 from objet.utils.calibration import load_coordinates, bbox_from_region
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
-@dataclass
-class Fond:
-    coordinates_value: Optional[tuple[int, int, int, int]] = None
-    amount: float = 0.0
-    
-    def reset(self) -> None:
-        self.amount = 0.0
-    
 
-@dataclass
-class Player:
-    coordinates_value: Optional[tuple[int, int, int, int]] = None
-    active_start : bool = True
-    continue_round : bool = True
-    fond = Fond(coordinates_value=coordinates_value)
-    
-    def reset(self) -> None:
-        self.amount = 0.0
     
 
 @dataclass
@@ -47,6 +31,7 @@ class Table:
     scan: ScanTable = field(default_factory=ScanTable)
     pot: Fond = field(default_factory=Fond)
     new_party_flag: bool = False
+    players : Players = field(default_factory=Players)
     
     
     def __post_init__(self) -> None:
@@ -92,9 +77,23 @@ class Table:
                     value_score=confidence_value,
                     suit_score=confidence_suit,
                 )
+        # for player in self.players.player:
+        #     etat , 
+            
+            
 
                 
         # self.scan.scan_pot()
+        
+        # self.scan.scan_player()
+        #    def scan_etat(self) -> Optional[str]:
+        # # TODO Il faut découper l'image en fonction de ses coordonnées. 
+        # return is_etat_player(region=self.coordonate_etat, threshold=0.7)
+    
+        #     def scan_money(self) -> Optional[float]:
+        #         TODO
+        #         return 1
+    
 
 
         return True
@@ -102,6 +101,7 @@ class Table:
     def New_Party(self)-> None:
         """Réinitialise l'état de la Table. et fait remonter un événement."""
         self.cards.reset()
+        self.players.reset()
         self.new_party_flag = True
         
     

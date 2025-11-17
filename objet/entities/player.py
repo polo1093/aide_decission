@@ -1,44 +1,147 @@
 """Entités décrivant les joueurs présents à la table."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass,field,fields  
 from typing import Optional
+from pathlib import Path
+import sys
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    
+from objet.scanner.cards_recognition import is_etat_player
+from objet.utils.calibration import bbox_from_region, load_coordinates
+    
 list_etat = ["No_start", "fold", "play","paid"]
+DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 @dataclass
-class Player_etat:
-    etat: Optional[str] = list_etat[0]
+class Fond:
+    coordinates_value: Optional[tuple[int, int, int, int]] = None
+    amount: float = 0.0
+    
+    def reset(self) -> None:
+        self.amount = 0.0
+    def __repr__(self) -> str:
+        # repr compact, mais tu peux faire plus verbeux si tu veux
+        return f"Fond(amount={self.amount})"  
+    def __str__(self) -> str:
+        return f"{self.amount:.2f}"
+    
+             
+@dataclass
+class Players:
+    
+    coord_path: Path | str = DEFAULT_COORD_PATH
+    player : list[Player] =  field(default_factory=list)
+    
+    def __post_init__(self) -> None:
+        regions, templates_resolved, _ = load_coordinates(self.coord_path)
+        if not self.player:
+            self.player = [ Player(
+                coordonate_money=bbox_from_region(regions.get(f"player_{i}_money")),
+                coordonate_etat=bbox_from_region(regions.get(f"player_{i}_etat")),
+                ) for i in range(1,6)]
+    
+    def __iter__(self) -> Iterator[Player]:
+        return iter(self.player)
 
+    def __len__(self) -> int:
+        return len(self.player)
+
+    def __getitem__(self, index: int) -> Player:
+        return self.player[index]   
+    
+    def reset(self) -> None:
+        for p in self.player:
+            p.reset()
+    def new_round(self) -> None:
+        for p in self.player:
+            p.new_round()
+            
+    
+    
+    
+    
 
 @dataclass
 class Player:
     coordonate_money: Optional[tuple[int, int, int, int]] = None
     coordonate_etat: Optional[tuple[int, int, int, int]] = None
-    active_days_at_start: bool = False
-    fond: Optional[float] = 0
-    fond_start: Optional[float] = 0
+    active_at_start: bool = True  # Indique si le joueur était actif au début de la main pas utiliser
+    fond_start_Party: Optional[float] = 0
+    fond = Fond(coordinates_value=coordonate_money)
+    etat : str = "play"
+    etat_modified_this_round : bool = False
     
     def __init__(self):
-        self.etat = Player_etat()
+        pass
     
-    money_relance: Optional[float] = 0
-    money_paid: Optional[float] = 0
+    # def
 
-    def refresh(self, fond: Optional[float] = 0) -> None:
-        self.fond = fond
-        if self.fond:
-            self.active_days_at_start = True
 
-    def is_activate(self) -> None:
-        return True if self.etat in  ["play" , "paid"] else False
+    def is_activate(self) -> bool:
+        return True if self.etat in  ["play" , "paid"] and self.active_at_start else False
 
+    def reset(self) -> None:
+        self.fond.reset()
+        self.active_at_start = True
+        self.continue_round = True
+    
+    def new_round(self):
+        if self.etat_modified_this_round == False and self.etat == "play":
+            self.etat = "fold"
+        self.etat_modified_this_round = False
+        if self.is_activate():
+            self.etat = "play"
+        
+        
+            
+    
+    def apply_scan(self, str_etat, money ) -> None :
+        self.refresh_etat(str_etat, money)
+        self.refresh_fond(money)
+        if self.fond_start_Party == 0:
+            self.active_at_start = False
+        
+    def refresh_etat(self, etat: str, money: float) -> None:
+        if money < self.fond.amount or etat == "paid":
+            self.etat = "paid"
+            self.etat_modified_this_round = True    
+        if  etat == "fold":
+            self.etat = "fold"
+            self.etat_modified_this_round = True
+        if etat == "CHECK" :
+            self.etat = "play"
+            self.etat_modified_this_round = True           
+            
+    def refresh_fond(self, money: float) -> None:
+        if self.fond_start_Party==0:
+            self.fond_start_Party = money
+        self.fond.amount = money
+        
+    def __repr__(self) -> str:
+        """
+        Repr au format dataclass classique, mais avec un champ dérivé supplémentaire:
+        'fonds=<montant>'.
+        """
+        cls_name = self.__class__.__name__
+        parts = []
+        for f in fields(self):
+            value = getattr(self, f.name)
+            parts.append(f"{f.name}={value!r}")
+        # Champ dérivé supplémentaire
+        parts.append(f"fonds={self.fond.amount!r}")
+        return f"{cls_name}({', '.join(parts)})"
+        
 
 
 if __name__ == "__main__":
     p=Player()
     print(p)
     print(p.is_activate())
+    
 
 __all__ = ["Player"]

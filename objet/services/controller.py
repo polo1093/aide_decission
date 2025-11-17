@@ -65,6 +65,8 @@ class Controller:
         # Informations sur le board
         board_cards_str = [card.formatted for card in self.game.table.cards.board_cards()]
         
+        player_scan = [f"J{i+1} active={player.is_activate()} : {player.fond}   "
+                    for i, player in enumerate(self.game.table.players)]
 
         # Informations sur les boutons
         # buttons_info = []
@@ -92,18 +94,25 @@ class Controller:
         #     player_money_info.append(f"{player}: {money_str}")
 
         # player_money_str = '\n'.join(player_money_info)
+        etat_me_cards_str = [card.formatted for card in self.game.etat.cards.me_cards()]
+        etat_board_cards_str = [card.formatted for card in self.game.etat.cards.board_cards()]
 
         return (
         #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
-             f"Mes cartes: {me_cards_str}\n"
-             f"Cartes sur le board: {board_cards_str}\n"
+            f"Live poker scanner\n"
+            f"Mes cartes: {me_cards_str}\n"
+            f"Cartes sur le board: {board_cards_str}\n"
+            f"{player_scan}"
+            f"{'=' * 30}ETAT{'=' * 30}\n"
+            f"Mes cartes: {etat_me_cards_str}\n"
+            f"Cartes sur le board: {etat_board_cards_str}\n"
+             
         #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
         #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
         #     f"Informations sur les boutons:\n{buttons_str}\n\n"
         #     f"Argent des joueurs:\n{player_money_str}"
          )
 
-        return "Statistiques du jeu désactivées pour les tests de scan."
 
 
 
@@ -112,12 +121,4 @@ if __name__ == "__main__":
     result = controller.main()
     print(result)
 
-    scan = getattr(controller.game.table, "scan", None)
-    screen_array = getattr(scan, "screen_array", None) if scan is not None else None
-    if screen_array is None:
-        print("Aucune capture disponible (screen_array est None).")
-    elif hasattr(screen_array, "shape"):
-        print("Capture disponible avec shape:", screen_array.shape)
-    else:
-        print("Capture disponible de type:", type(screen_array))
 
