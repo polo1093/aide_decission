@@ -10,8 +10,8 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-from objet.entities.player import Fond , Players ,Buttons
+from objet.entities.buttons import Buttons
+from objet.entities.player import Fond , Players 
 from objet.state import  CaptureState, CardsState
 from objet.scanner.scan import ScanTable
 from objet.utils.calibration import load_coordinates, bbox_from_region

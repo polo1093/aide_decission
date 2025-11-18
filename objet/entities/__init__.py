@@ -1,11 +1,10 @@
 """Entités de base manipulées par les services du projet."""
-from .bouton import Action, Bouton
+from .buttons import  Buttons
 from .card import Card
 from .player import Player
 
 __all__ = [
-    "Action",
-    "Bouton",
+    "Buttons",
     "CardObservation",
     "CardSlot",
     "convert_card",

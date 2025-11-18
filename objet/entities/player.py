@@ -35,6 +35,8 @@ class Players:
     
     coord_path: Path | str = DEFAULT_COORD_PATH
     player : list[Player] =  field(default_factory=list)
+    nbr_player_active : int = 5
+    nbr_player_start : int = 5
     
     def __post_init__(self) -> None:
         regions, templates_resolved, _ = load_coordinates(self.coord_path)
@@ -60,6 +62,12 @@ class Players:
         for p in self.player:
             p.new_round()
             
+    
+    def cal_nbr_player_start(self)-> int:
+        self.nbr_player_start = sum([self.player[i].is_activate() for i in range(5)])
+    
+    def cal_nbr_player_active(self)-> int:
+        self.nbr_player_active = sum([self.player[i].is_activate() for i in range(5)])
     
     
     
@@ -104,6 +112,9 @@ class Player:
             self.active_at_start = False
         
     def refresh_etat(self, etat: str, money: float) -> None:
+        if etat == "play":
+            self.etat = "play"
+            self.etat_modified_this_round = True
         if money < self.fond.amount or etat == "paid":
             self.etat = "paid"
             self.etat_modified_this_round = True    

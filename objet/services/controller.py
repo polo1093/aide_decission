@@ -96,6 +96,7 @@ class Controller:
         # player_money_str = '\n'.join(player_money_info)
         etat_me_cards_str = [card.formatted for card in self.game.etat.cards.me_cards()]
         etat_board_cards_str = [card.formatted for card in self.game.etat.cards.board_cards()]
+        etat_nbr_player = f"Player start {self.game.etat.players.nbr_player_start}    Player active {self.game.etat.players.nbr_player_active}"
 
         return (
         #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
@@ -106,6 +107,7 @@ class Controller:
             f"{'=' * 30}ETAT{'=' * 30}\n"
             f"Mes cartes: {etat_me_cards_str}\n"
             f"Cartes sur le board: {etat_board_cards_str}\n"
+            f"{etat_nbr_player}\n"
              
         #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
         #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"

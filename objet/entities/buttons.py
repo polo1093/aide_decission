@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
     
 from objet.utils.calibration import bbox_from_region, load_coordinates   
+import re
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 list_etat_button= ["check", "relance", "mise", "fold", "paie", "all-in"  ]
@@ -77,13 +78,31 @@ class Button:
             self.enabled = False
             return 
         self.texte=texte
-        etat = one_element_in_list_str(list_etat_button,texte)
+        etat = one_element_in_str(list_etat_button,texte)
         if etat != None :
             self.enabled = True
-        # TODO value
-            
-        
-        
+            self.etat = etat
+        self.value =  float_in_str(texte)    
+    
+    
+    
+def float_in_str(texte: str) -> float:
+    """Extrait la première valeur numérique d'une chaîne et la retourne en float.
+    Retourne 0.0 si aucune valeur trouvée ou en cas d'erreur."""
+    if not texte:
+        return 0.0
+
+    m = re.search(r'[-+]?\d+(?:[.,]\d+)?', texte)
+    if not m:
+        return None
+    else:
+        s = m.group(0).replace(',', '.')
+        try:
+            v = float(s)
+        except ValueError:
+            v = None
+    return v if v is not None else 0.0
+
 
 
 def _is_target_with_two_missing(candidate: str, target: str) -> bool:
@@ -92,7 +111,7 @@ def _is_target_with_two_missing(candidate: str, target: str) -> bool:
     it = iter(target)
     return all(ch in it for ch in candidate)
 
-def one_element_in_list_str(list_str,str) -> str:
+def one_element_in_str(list_str,str) -> str:
     for cand in list_str:
         if _is_target_with_two_missing(cand, target):
             return cand

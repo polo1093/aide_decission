@@ -1,5 +1,4 @@
 """Gestion centralisée de l'état du jeu."""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
@@ -16,9 +15,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import tool
 from objet.entities.card import Card
+from objet.entities.player import Players
+from objet.entities.buttons import Buttons
+
 from objet.services.table import Table
 from objet.scanner.cards_recognition import CardObservation
-from objet.state import ButtonsState, CardsState, CaptureState, MetricsState
+from objet.state import  CardsState, CaptureState, MetricsState
 
 from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
@@ -30,23 +32,57 @@ LOGGER = logging.getLogger(__name__)
 class etat:
     """Stocke l'état courant de la table et calcule les décisions."""
     cards : CardsState = field(default_factory=CardsState)
+    players : Players = field(default_factory=Players)
+    cards_change : int = 0
+
+    
     
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
         self.cards = CardsState()
-        
+        self.players = Players()
+
+    
+    
+    
+    
+    
+    def update_players(self,players : Players)->None:
+        self.players = players # TODO a ameliorer 
+        self.players.cal_nbr_player_start()
+        self.players.cal_nbr_player_active()
+    
+    
     def update_cards_state(self, cards_state: CardsState) -> None:
         """Met à jour l'état des cartes."""
+        nbr_scan = 3 *2 
         for i,card in enumerate(cards_state.board):
-            if card.formatted == self.cards.board[i].formatted or card.formatted is None:
-                continue
-            self.cards.board[i] = card
-        for i,card in enumerate(cards_state.me):
-            if card.formatted == self.cards.me[i].formatted or card.formatted is None:
-                continue
-            self.cards.me[i] = card
+            if self.cards.board[i].formatted is None:
+                self.cards.board[i] = card
+            if card.formatted is None :
+                continue   
+            if card.formatted != self.cards.board[i].formatted:
+                self.cards_change +=2
+                if self.cards_change >= nbr_scan:
+                        self.cards.board[i] = card
+                        self.cards_change = 0
         
-    
+            
+        for i,card in enumerate(cards_state.me):
+            if self.cards.me[i].formatted is None:
+                self.cards.me[i] = card
+            if card.formatted is None :
+                continue   
+            if card.formatted != self.cards.me[i].formatted:
+                self.cards_change +=2
+                if self.cards_change >= nbr_scan:
+                        self.cards.me[i] = card
+                        self.cards_change = 0
+        self.cards_change -=1
+        
+    def update(self,*,cards_state: CardsState, players : Players) -> None:
+        self.update_cards_state(cards_state)
+        self.update_players(players)
 
 @dataclass
 class Game:
@@ -61,7 +97,7 @@ class Game:
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
         self.table.cards = CardsState()
-        self.table.buttons = ButtonsState()
+        self.table.buttons = Buttons()
         self.table.captures = CaptureState()
         
 
@@ -90,7 +126,7 @@ class Game:
         """Met à jour l'état du jeu à partir du dernier scan."""
         # TODO: compléter lorsque les métriques / boutons seront branchés
         
-        self.etat.update_cards_state(self.table.cards)
+        self.etat.update(cards_state = self.table.cards, players = self.table.players)
         return None
 
 
