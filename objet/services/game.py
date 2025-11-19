@@ -20,7 +20,8 @@ from objet.entities.buttons import Buttons
 
 from objet.services.table import Table
 from objet.scanner.cards_recognition import CardObservation
-from objet.state import CaptureState, MetricsState
+from objet.utils.capture import CaptureState
+from objet.utils.metrics import MetricsState
 
 from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
@@ -211,7 +212,7 @@ class Game:
         if StatePortion.CARDS not in portions:
             game.table.cards = CardsState()
         if StatePortion.BUTTONS not in portions:
-            game.table.buttons = ButtonsState()
+            game.table.buttons = Buttons()
         if StatePortion.CAPTURES not in portions:
             game.table.captures = CaptureState()
         return game
@@ -221,8 +222,7 @@ __all__ = [
     "Game",
     "CardObservation",
     "CardsState",
-    "ButtonsState",
+    "Buttons",
     "MetricsState",
     "CaptureState",
-    "convert_card",
 ]

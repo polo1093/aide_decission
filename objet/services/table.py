@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from objet.entities.buttons import Buttons
 from objet.entities.card import CardsState
 from objet.entities.player import Fond , Players
-from objet.state import CaptureState
+from objet.utils.capture import CaptureState
 from objet.scanner.scan import ScanTable
 from objet.utils.calibration import load_coordinates, bbox_from_region
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
