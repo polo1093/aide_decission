@@ -11,8 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 from objet.entities.buttons import Buttons
-from objet.entities.player import Fond , Players 
-from objet.state import  CaptureState, CardsState
+from objet.entities.card import CardsState
+from objet.entities.player import Fond , Players
+from objet.utils.capture import CaptureState
 from objet.scanner.scan import ScanTable
 from objet.utils.calibration import load_coordinates, bbox_from_region
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")

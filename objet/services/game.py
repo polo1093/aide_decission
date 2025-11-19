@@ -14,13 +14,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import tool
-from objet.entities.card import Card
+from objet.entities.card import Card, CardsState
 from objet.entities.player import Players
 from objet.entities.buttons import Buttons
 
 from objet.services.table import Table
 from objet.scanner.cards_recognition import CardObservation
-from objet.state import  CardsState, CaptureState, MetricsState
+from objet.utils.capture import CaptureState
+from objet.utils.metrics import MetricsState
 
 from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
@@ -90,7 +91,7 @@ class Game:
 
     etat: etat = field(default_factory=etat)
     table: Table = field(default_factory=Table)
-    metrics: MetricsState = field(default_factory=MetricsState)
+    metrics: Optional[MetricsState] = None
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
     workflow: Optional[str] = None
 
@@ -125,8 +126,9 @@ class Game:
     def update_from_scan(self) -> None:
         """Met à jour l'état du jeu à partir du dernier scan."""
         # TODO: compléter lorsque les métriques / boutons seront branchés
-        
+
         self.etat.update(cards_state = self.table.cards, players = self.table.players)
+        self.metrics = MetricsState.from_game(self)
         return None
 
 
@@ -136,12 +138,15 @@ class Game:
 
     # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
-        if len(self.table.cards.player_cards()) != 2:
+        if len(self.table.cards.me_cards()) != 2:
             return None
         try:
             self._calcul_chance_win()
         except ValueError as exc:  # état incomplet : on journalise et on abandonne
             LOGGER.warning("Impossible de calculer la décision: %s", exc)
+            return None
+        if self.metrics is None:
+            LOGGER.warning("Les métriques de décision sont indisponibles.")
             return None
         return self.table.suggest_action(
             chance_win_x=self.metrics.chance_win_x,
@@ -150,20 +155,25 @@ class Game:
 
     # ---- Calculs internes --------------------------------------------
     def _calcul_chance_win(self) -> None:
-        me_cards = self.table.cards.player_cards()
+        me_cards = self.table.cards.me_cards()
         board_cards = self.table.cards.board_cards()
         if len(me_cards) != 2:
             raise ValueError("Les cartes du joueur ne sont pas complètes ou invalides.")
         if len(board_cards) not in (0, 3, 4, 5):
             raise ValueError("Le nombre de cartes sur le board est incorrect.")
-        self.metrics.chance_win_0 = HandEvaluator.evaluate_hand(me_cards, board_cards)
-        players = max(1, int(self.metrics.players_count or 1))
-        self.metrics.chance_win_x = (self.metrics.chance_win_0 or 0) ** players
+        chance_win_0 = HandEvaluator.evaluate_hand(me_cards, board_cards)
+        metrics = self.metrics or MetricsState.from_game(self)
+        players = max(1, int(metrics.players_active))
+        chance_win_x = (chance_win_0 or 0) ** players
+        self.metrics = metrics.with_chances(
+            chance_win_0=chance_win_0,
+            chance_win_x=chance_win_x,
+        )
 
     def _calcule_ev(self, chance_win: Optional[float], mise: Optional[float]) -> Optional[float]:
-        if chance_win is None or mise is None or self.metrics.pot is None:
+        if chance_win is None or mise is None or self.metrics is None:
             return None
-        players = max(1, int(self.metrics.players_count or 1))
+        players = max(1, int(self.metrics.players_active))
         return chance_win * (self.metrics.pot + (mise * (players + 1))) - (1 - chance_win) * mise
 
 
@@ -211,7 +221,7 @@ class Game:
         if StatePortion.CARDS not in portions:
             game.table.cards = CardsState()
         if StatePortion.BUTTONS not in portions:
-            game.table.buttons = ButtonsState()
+            game.table.buttons = Buttons()
         if StatePortion.CAPTURES not in portions:
             game.table.captures = CaptureState()
         return game
@@ -221,8 +231,7 @@ __all__ = [
     "Game",
     "CardObservation",
     "CardsState",
-    "ButtonsState",
+    "Buttons",
     "MetricsState",
     "CaptureState",
-    "convert_card",
 ]

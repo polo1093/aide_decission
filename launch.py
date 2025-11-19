@@ -23,7 +23,12 @@ from typing import Optional
 import tkinter as tk
 from tkinter import ttk
 
+import logging
+
 from objet.services.controller import Controller   # <--- IMPORTANT : import direct
+
+
+logger = logging.getLogger(__name__)
 
 
 class App(tk.Tk):
@@ -149,13 +154,9 @@ class App(tk.Tk):
         t0 = time.perf_counter()
         try:
             out = self.controller.main()
-        except Exception as e:
-            self.last_call_ms = None
-            self.fps = None
-            self._set_text(f"Erreur Controller.main(): {e}")
-            self.var_perf.set("scan: — ms | fps: —")
-            self.lbl_status.configure(text="Erreur controller.")
-            return
+        except Exception as exc:
+            self._handle_controller_exception(context="Snapshot", error=exc)
+            raise
 
         dt_ms = (time.perf_counter() - t0) * 1000.0
         self.last_call_ms = dt_ms
@@ -177,12 +178,9 @@ class App(tk.Tk):
         t0 = time.perf_counter()
         try:
             out = self.controller.main()
-        except Exception as e:
-            self.last_call_ms = None
-            self.fps = None
-            self._set_text(f"Erreur Controller.main(): {e}")
-            self.var_perf.set("scan: — ms | fps: —")
-            self.lbl_status.configure(text="Erreur controller.")
+        except Exception as exc:
+            self._handle_controller_exception(context="Scan continu", error=exc)
+            raise
         else:
             dt_ms = (time.perf_counter() - t0) * 1000.0
             self.last_call_ms = dt_ms
@@ -206,6 +204,15 @@ class App(tk.Tk):
         if self.scanning:
             self.after(self.scan_interval_ms, self._tick)
 
+    def _handle_controller_exception(self, context: str, error: Exception):
+        """Affiche l'erreur côté UI et loggue le détail pour la console."""
+        self.last_call_ms = None
+        self.fps = None
+        self._set_text(f"Erreur Controller.main(): {error}")
+        self.var_perf.set("scan: — ms | fps: —")
+        self.lbl_status.configure(text="Erreur controller.")
+        logger.exception("Erreur lors de %s", context)
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -224,6 +231,10 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     controller = Controller()
     app = App(controller=controller, scan_interval_ms=args.interval)
     app.mainloop()
