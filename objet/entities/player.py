@@ -19,10 +19,10 @@ DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 @dataclass
 class Fond:
     coordinates_value: Optional[tuple[int, int, int, int]] = None
-    amount: float = 0.0
+    amount: Optional[float] = None
     
     def reset(self) -> None:
-        self.amount = 0.0
+        self.amount = None
     def __repr__(self) -> str:
         # repr compact, mais tu peux faire plus verbeux si tu veux
         return f"Fond(amount={self.amount})"  
@@ -106,6 +106,8 @@ class Player:
             
     
     def apply_scan(self, str_etat, money ) -> None :
+        if money is None:
+            raise ValueError("Impossible de lire le stack du joueur.")
         self.refresh_etat(str_etat, money)
         self.refresh_fond(money)
         if self.fond_start_Party == 0:
@@ -115,7 +117,8 @@ class Player:
         if etat == "play":
             self.etat = "play"
             self.etat_modified_this_round = True
-        if money < self.fond.amount or etat == "paid":
+        existing = self.fond.amount
+        if (existing is not None and money < existing) or etat == "paid":
             self.etat = "paid"
             self.etat_modified_this_round = True    
         if  etat == "fold":

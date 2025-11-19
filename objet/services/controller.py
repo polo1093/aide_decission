@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import sys
+from typing import Optional
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -24,14 +25,17 @@ class Controller:
     def main(self):
 
         if self.game.scan_to_data_table():
-            self.game.update_from_scan()
-            return self.game_stat_to_string()
+            new_party = self.game.update_from_scan()
+            result = self.game_stat_to_string(new_party)
+            if new_party:
+                self.game.ack_new_party()
+            return result
         self.cpt += 1
         return f"don t find     Scan n°{self.cpt}"
         
 
     
-    def game_stat_to_string(self):
+    def game_stat_to_string(self, new_party_state: Optional[bool] = None):
         """
         Formate les informations du jeu pour l'utilisateur.
 
@@ -102,12 +106,16 @@ class Controller:
         etat_board_cards_str = [card.formatted for card in self.game.etat.cards.board_cards()]
         etat_nbr_player = f"Player start {self.game.etat.players.nbr_player_start}    Player active {self.game.etat.players.nbr_player_active}"
 
+        new_party_notice = ""
+        if new_party_state is True:
+            new_party_notice = "Nouvelle partie détectée (pot en baisse)."
+        elif new_party_state is None:
+            new_party_notice = "Pot non détecté, impossible de statuer sur la nouvelle partie."
+
         metrics_lines = [
             f"Pot: {pot}",
             f"Hero stack: {hero_stack}",
-            f"Hero delta: {hero_delta}",
-            f"Players actifs: {metrics.players_active}",
-            f"Players départ: {metrics.players_at_start}",
+            f"Hero delta: {hero_delta}\n",
             f"Street: {metrics.street}",
             f"Chance win (1): {chance_win_0}",
             f"Chance win (table): {chance_win_x}",
@@ -116,17 +124,20 @@ class Controller:
 
         return (
         #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
-            f"Live poker scanner\n"
+            
             f"Mes cartes: {me_cards_str}\n"
             f"Cartes sur le board: {board_cards_str}\n"
             f"{player_scan}\n"
-            f"Decision -> {decision_line}\n"
-            f"Métriques -> {metrics_str}\n"
+            
+            
             f"{'=' * 30}ETAT{'=' * 30}\n"
             f"Mes cartes: {etat_me_cards_str}\n"
             f"Cartes sur le board: {etat_board_cards_str}\n"
             f"{etat_nbr_player}\n"
-
+            (f"{new_party_notice}\n" if new_party_notice else "")
+            f"{'=' * 30}Métriques{'=' * 30}\n"
+            f"Métriques -> {metrics_str}\n"
+            f"Decision -> {decision_line}\n"
         #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
         #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
         #     f"Informations sur les boutons:\n{buttons_str}\n\n"

@@ -199,10 +199,10 @@ class ScanTable:
         value = self.scan_money( position_money)       
         return etat, value
 
-    def scan_money(self, position):
+    def scan_money(self, position) -> Optional[float]:
         img = self._extract_patch(position)
         value, confidence, raw_text = self.ocr.read_amount(img)      
-        return 0.0  if value is None else value
+        return None if value is None else value
 
 
     def scan_bouton(self, position):

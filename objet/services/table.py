@@ -63,20 +63,19 @@ class Table:
             )
         
         for card in self.cards.board:
-            if card.formatted is None:
-                value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
-                    position_value=card.card_coordinates_value,
-                    position_suit=card.card_coordinates_suit,
-                    template_set=card.template_set,
-                )
-                if value is None and suit is None:
-                    continue
-                card.apply_observation(
-                    value=value,
-                    suit=suit,
-                    value_score=confidence_value,
-                    suit_score=confidence_suit,
-                )
+            value, suit, confidence_value, confidence_suit = self.scan.scan_carte(
+                position_value=card.card_coordinates_value,
+                position_suit=card.card_coordinates_suit,
+                template_set=card.template_set,
+            )
+            if value is None and suit is None:
+                continue
+            card.apply_observation(
+                value=value,
+                suit=suit,
+                value_score=confidence_value,
+                suit_score=confidence_suit,
+            )
         for player in self.players.player:
             etat , money = self.scan.scan_player(
                 position_money= player.fond.coordinates_value,

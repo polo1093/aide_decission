@@ -73,7 +73,10 @@ class Card:
             suit_sym = SUIT_ALIASES.get(self.suit, self.suit)
             formatted = f"{self.value}{suit_sym}"
             self.formatted = formatted
-            self.poker_card = self._convert_string_to_pokercard(formatted) 
+            self.poker_card = self._convert_string_to_pokercard(formatted)
+        else:
+            self.formatted = None
+            self.poker_card = None
             
     def reset(self) -> None:
         """Réinitialise l'état de la carte."""

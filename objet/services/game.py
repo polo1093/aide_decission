@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from pokereval.card import Card as PokerCard
 from pokereval.hand_evaluator import HandEvaluator
 
 import sys
@@ -94,6 +95,9 @@ class Game:
     metrics: Optional[MetricsState] = None
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
     workflow: Optional[str] = None
+    _last_pot_amount: Optional[float] = field(default=None, init=False, repr=False)
+    _new_party_flag: bool = field(default=False, init=False, repr=False)
+    _pending_new_party_cleanup: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
@@ -123,13 +127,18 @@ class Game:
         return True
     
 
-    def update_from_scan(self) -> None:
-        """Met à jour l'état du jeu à partir du dernier scan."""
-        # TODO: compléter lorsque les métriques / boutons seront branchés
+    def update_from_scan(self) -> Optional[bool]:
+        """Met à jour l'état du jeu à partir du dernier scan.
 
+        Returns:
+            Optional[bool]: True si une nouvelle partie a été détectée, False sinon, None si le pot n'a pas été lu.
+        """
+
+        party_state = self._detect_new_party()
         self.etat.update(cards_state = self.table.cards, players = self.table.players)
         self.metrics = MetricsState.from_game(self)
-        return None
+        self._calcul_chance_win()
+        return party_state
 
 
    
@@ -154,21 +163,84 @@ class Game:
         )
 
     # ---- Calculs internes --------------------------------------------
+    def _detect_new_party(self) -> Optional[bool]:
+        current_pot = getattr(self.table.pot, "amount", None)
+        if current_pot is None:
+            self._last_pot_amount = None
+            self._new_party_flag = False
+            return None
+
+        if self._last_pot_amount is None:
+            self._last_pot_amount = current_pot
+            self._new_party_flag = False
+            return False
+
+        if current_pot < self._last_pot_amount:
+            self._new_party_flag = True
+            self._pending_new_party_cleanup = True
+            self._last_pot_amount = current_pot
+            return True
+
+        self._new_party_flag = False
+        self._pending_new_party_cleanup = False
+        self._last_pot_amount = current_pot
+        return False
+
+    def ack_new_party(self) -> None:
+        if not self._pending_new_party_cleanup:
+            return
+        self.table.New_Party()
+        self.etat.cards.reset()
+        self.etat.players.reset()
+        self.metrics = None
+        self._pending_new_party_cleanup = False
+        self._new_party_flag = False
+
+    @property
+    def new_party_detected(self) -> bool:
+        return self._new_party_flag
+
     def _calcul_chance_win(self) -> None:
+    def _calcul_chance_win(self) -> None:
+        if self.metrics is None:
+            raise ValueError("Les métriques doivent être initialisées avant de calculer les chances.")
+
         me_cards = self.table.cards.me_cards()
-        board_cards = self.table.cards.board_cards()
         if len(me_cards) != 2:
             raise ValueError("Les cartes du joueur ne sont pas complètes ou invalides.")
-        if len(board_cards) not in (0, 3, 4, 5):
+
+        hero_cards = [
+            self._require_poker_card(card, f"main héros {idx + 1}")
+            for idx, card in enumerate(me_cards)
+        ]
+
+        board_cards = [
+            card for card in self.table.cards.board_cards() if card.formatted
+        ]
+        board_length = len(board_cards)
+        if board_length not in (0, 3, 4, 5):
             raise ValueError("Le nombre de cartes sur le board est incorrect.")
-        chance_win_0 = HandEvaluator.evaluate_hand(me_cards, board_cards)
-        metrics = self.metrics or MetricsState.from_game(self)
-        players = max(1, int(metrics.players_active))
+
+        board_poker_cards = [
+            self._require_poker_card(card, f"board card {idx + 1}")
+            for idx, card in enumerate(board_cards)
+        ]
+
+        chance_win_0 = HandEvaluator.evaluate_hand(hero_cards, board_poker_cards)
+        players = max(1, int(self.metrics.players_active))
         chance_win_x = (chance_win_0 or 0) ** players
-        self.metrics = metrics.with_chances(
+
+        self.metrics = self.metrics.with_chances(
             chance_win_0=chance_win_0,
             chance_win_x=chance_win_x,
         )
+
+    @staticmethod
+    def _require_poker_card(card: Card, label: str) -> PokerCard:
+        poker_card = getattr(card, "poker_card", None)
+        if poker_card is None:
+            raise ValueError(f"La carte {label} n'a pas été normalisée pour PokéRival.")
+        return poker_card
 
     def _calcule_ev(self, chance_win: Optional[float], mise: Optional[float]) -> Optional[float]:
         if chance_win is None or mise is None or self.metrics is None:
