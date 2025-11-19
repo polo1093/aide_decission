@@ -15,9 +15,10 @@ class Controller:
         self.running = False
         self.cpt = 0
         self.game_stat = {}
-        #
+        from objet.services.decision import Decision
         from objet.services.game import Game
         self.game = Game()
+        self.decision = Decision()
         # self.click = Cliqueur()
 
     def main(self):
@@ -38,12 +39,9 @@ class Controller:
             str: Une chaîne de caractères contenant les informations formatées.
         """
         # Récupération des informations de base
-        # metrics = self.game.metrics
-        # nbr_player = metrics.players_count
-        # pot = metrics.pot
-        # fond = metrics.fond
-        # chance_win_0 = metrics.chance_win_0
-        # chance_win_x = metrics.chance_win_x
+        metrics = self.game.metrics
+        if metrics is None:
+            raise ValueError("Les métriques ne sont pas disponibles après le scan.")
 
         # Fonction pour arrondir à 4 chiffres significatifs
         def round_sig(x, sig=4):
@@ -53,10 +51,16 @@ class Controller:
                 return x
 
         # Arrondi des valeurs numériques
-        # pot = round_sig(pot)
-        # fond = round_sig(fond)
-        # chance_win_0 = round_sig(chance_win_0)
-        # chance_win_x = round_sig(chance_win_x)
+        pot = round_sig(metrics.pot)
+        hero_stack = round_sig(metrics.hero_stack)
+        hero_delta = round_sig(metrics.hero_stack_delta) if metrics.hero_stack_delta is not None else None
+        chance_win_0 = round_sig(metrics.chance_win_0) if metrics.chance_win_0 is not None else None
+        chance_win_x = round_sig(metrics.chance_win_x) if metrics.chance_win_x is not None else None
+
+        decision_result = self.decision.decide(self.game)
+        decision_line = f"Action: {decision_result.action} (raison: {decision_result.reason})"
+        if decision_result.raise_amount is not None:
+            decision_line += f" | Raise: {round_sig(decision_result.raise_amount)}"
 
         # Informations sur les cartes du joueur
         me_cards_str = [card.formatted for card in self.game.table.cards.me_cards()]
@@ -98,17 +102,31 @@ class Controller:
         etat_board_cards_str = [card.formatted for card in self.game.etat.cards.board_cards()]
         etat_nbr_player = f"Player start {self.game.etat.players.nbr_player_start}    Player active {self.game.etat.players.nbr_player_active}"
 
+        metrics_lines = [
+            f"Pot: {pot}",
+            f"Hero stack: {hero_stack}",
+            f"Hero delta: {hero_delta}",
+            f"Players actifs: {metrics.players_active}",
+            f"Players départ: {metrics.players_at_start}",
+            f"Street: {metrics.street}",
+            f"Chance win (1): {chance_win_0}",
+            f"Chance win (table): {chance_win_x}",
+        ]
+        metrics_str = " | ".join(metrics_lines)
+
         return (
         #     f"Nombre de joueurs: {nbr_player}   Pot: {pot} €   Fond: {fond} €\n"
             f"Live poker scanner\n"
             f"Mes cartes: {me_cards_str}\n"
             f"Cartes sur le board: {board_cards_str}\n"
             f"{player_scan}\n"
+            f"Decision -> {decision_line}\n"
+            f"Métriques -> {metrics_str}\n"
             f"{'=' * 30}ETAT{'=' * 30}\n"
             f"Mes cartes: {etat_me_cards_str}\n"
             f"Cartes sur le board: {etat_board_cards_str}\n"
             f"{etat_nbr_player}\n"
-             
+
         #     f"Chance de gagner (1 joueur): {chance_win_0}\n"
         #     f"Chance de gagner ({nbr_player} joueurs): {chance_win_x}\n\n"
         #     f"Informations sur les boutons:\n{buttons_str}\n\n"
