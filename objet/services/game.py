@@ -14,13 +14,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import tool
-from objet.entities.card import Card
+from objet.entities.card import Card, CardsState
 from objet.entities.player import Players
 from objet.entities.buttons import Buttons
 
 from objet.services.table import Table
 from objet.scanner.cards_recognition import CardObservation
-from objet.state import  CardsState, CaptureState, MetricsState
+from objet.state import CaptureState, MetricsState
 
 from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
