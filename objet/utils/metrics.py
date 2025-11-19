@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Mapping, Optional
 
 import tool
-from objet.state.utils import extract_scan_value
+from objet.utils.state_utils import extract_scan_value
 
 
 @dataclass

@@ -1,3 +1,3 @@
-"""Paquetage structurǸ en entitǸs, Ǹtats et services."""
+"""Paquetage structuré en entités, services et utilitaires."""
 
-__all__ = ["entities", "services", "state"]
+__all__ = ["entities", "services", "utils"]
