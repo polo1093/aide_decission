@@ -8,7 +8,6 @@ import pytest
 
 from objet.entities.card import Card, CardsState
 from objet.services.decision import Decision
-from objet.utils.metrics import MetricsState
 
 
 class DummyPlayer:
@@ -25,6 +24,8 @@ class DummyPlayer:
 class DummyPlayers:
     def __init__(self) -> None:
         self._players = [DummyPlayer(100.0), DummyPlayer(80.0)]
+        self.nbr_player_active = len(self._players)
+        self.nbr_player_start = len(self._players)
 
     def __len__(self) -> int:
         return len(self._players)
@@ -47,7 +48,14 @@ class DummyGame:
     def __init__(self, cards_state: CardsState, *, pot_amount: Optional[float] = 50.0) -> None:
         self.cards = cards_state
         self.table = DummyTable(cards_state, pot_amount)
-        self.metrics: Optional[MetricsState] = None
+        self.etat = SimpleNamespace(
+            cards=cards_state,
+            players=self.table.players,
+            chance_win=None,
+            chance_win_0=None,
+            pot=pot_amount,
+            montant_a_jouer=None,
+        )
 
 
 def _cards_state(first: Optional[str], second: Optional[str]) -> CardsState:
@@ -58,23 +66,6 @@ def _cards_state(first: Optional[str], second: Optional[str]) -> CardsState:
 
 def _game_with_cards(first: Optional[str], second: Optional[str]) -> DummyGame:
     return DummyGame(_cards_state(first, second))
-
-
-def _metrics(chance: Optional[float], *, pot: float = 50.0) -> MetricsState:
-    return MetricsState(
-        pot=pot,
-        players_active=2,
-        players_at_start=2,
-        hero_stack=100.0,
-        hero_stack_start_hand=100.0,
-        hero_stack_delta=0.0,
-        hero_invested=5.0,
-        board_cards=0,
-        street="PREFLOP",
-        player_stacks={"J1": 100.0, "J2": 50.0},
-        chance_win_0=chance,
-        chance_win_x=chance,
-    )
 
 
 def test_wait_when_hero_cards_missing() -> None:
@@ -89,7 +80,7 @@ def test_wait_when_hero_cards_missing() -> None:
 
 def test_fold_when_chance_below_threshold() -> None:
     game = _game_with_cards("A♠", "K♠")
-    game.metrics = _metrics(0.10)
+    game.etat.chance_win = 0.10
     decision = Decision()
 
     result = decision.decide(game)
@@ -100,7 +91,8 @@ def test_fold_when_chance_below_threshold() -> None:
 
 def test_raise_when_chance_high() -> None:
     game = _game_with_cards("A♠", "K♠")
-    game.metrics = _metrics(0.80, pot=120.0)
+    game.etat.chance_win = 0.80
+    game.etat.pot = 120.0
     decision = Decision()
 
     result = decision.decide(game)
@@ -112,8 +104,9 @@ def test_raise_when_chance_high() -> None:
 
 def test_value_error_when_pot_missing() -> None:
     game = _game_with_cards("A♠", "K♠")
-    game.metrics = None
+    game.etat.chance_win = 0.5
     game.table.pot = None
+    game.etat.pot = None
     decision = Decision()
 
     with pytest.raises(ValueError):
