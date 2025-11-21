@@ -6,7 +6,6 @@ from typing import Literal, Optional, Sequence
 
 from objet.entities.card import Card, CardsState
 from objet.services.game import Game
-from objet.utils.metrics import MetricsState
 
 ActionType = Literal["WAIT", "FOLD", "CALL", "CHECK", "RAISE"]
 
@@ -34,13 +33,8 @@ class Decision:
         if len(known_cards) < 2:
             return DecisionResult(action="WAIT", reason="hero_cards_not_detected_yet")
 
-        metrics = self._resolve_metrics(game)
-        self._validate_metrics(metrics)
-
-        chance_win = metrics.chance_win_x
-        if chance_win is None:
-            return DecisionResult(action="WAIT", reason="missing_chance_win_estimate")
-        self._validate_chance(chance_win)
+        chance_win = self._resolve_chance(game)
+        pot_amount = self._resolve_pot(game)
 
         if chance_win < self.FOLD_THRESHOLD:
             return DecisionResult(action="FOLD", reason="chance_win_below_fold_threshold")
@@ -48,7 +42,7 @@ class Decision:
         if chance_win < self.AGGRESSIVE_THRESHOLD:
             return DecisionResult(action="CALL", reason="chance_win_between_thresholds")
 
-        raise_amount = self._compute_raise_amount(metrics)
+        raise_amount = self._compute_raise_amount(pot_amount)
         return DecisionResult(
             action="RAISE",
             reason="chance_win_above_aggressive_threshold",
@@ -61,30 +55,31 @@ class Decision:
             raise ValueError("Decision: hero must have exactly two cards slots.")
         return [card for card in hero_cards if getattr(card, "formatted", None)]
 
-    def _resolve_metrics(self, game: Game) -> MetricsState:
-        metrics = game.metrics
-        if metrics is None:
-            metrics = MetricsState.from_game(game)
-            game.metrics = metrics
-        return metrics
-
-    def _validate_metrics(self, metrics: MetricsState) -> None:
-        if metrics.pot < 0:
-            raise ValueError("Decision: pot must be non-negative.")
-        if metrics.players_active <= 0:
-            raise ValueError("Decision: there must be at least one active player.")
-        if metrics.players_at_start <= 0:
-            raise ValueError("Decision: the hand must have at least one starting player.")
-
-    def _validate_chance(self, chance_win: float) -> None:
+    def _resolve_chance(self, game: Game) -> float:
+        chance_win = game.etat.chance_win
+        if chance_win is None:
+            # Pas de valeur par défaut ici : on laisse l'exception remonter pour
+            # exposer immédiatement le problème, conformément à la philosophie
+            # du projet.
+            raise ValueError("Decision: aucune estimation de chance de gain disponible.")
         if not 0.0 <= chance_win <= 1.0:
-            raise ValueError("Decision: chance_win_x must be between 0 and 1.")
+            raise ValueError("Decision: chance_win doit être entre 0 et 1.")
+        if game.etat.players.nbr_player_active <= 0:
+            raise ValueError("Decision: aucun joueur actif détecté.")
+        if game.etat.players.nbr_player_start <= 0:
+            raise ValueError("Decision: aucune main en cours.")
+        return chance_win
 
-    def _compute_raise_amount(self, metrics: MetricsState) -> float:
-        pot = metrics.pot
-        if pot < 0:
-            raise ValueError("Decision: cannot compute raise amount with negative pot.")
-        return pot * self.RAISE_POT_FRACTION
+    def _resolve_pot(self, game: Game) -> float:
+        pot_amount = game.etat.pot
+        if pot_amount is None:
+            raise ValueError("Decision: pot manquant pour calculer le raise.")
+        if pot_amount < 0:
+            raise ValueError("Decision: pot négatif impossible.")
+        return pot_amount
+
+    def _compute_raise_amount(self, pot_amount: float) -> float:
+        return pot_amount * self.RAISE_POT_FRACTION
 
 
 __all__ = ["ActionType", "DecisionResult", "Decision"]

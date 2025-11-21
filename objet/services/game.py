@@ -11,7 +11,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import tool
 from objet.entities.card import Card, CardsState
 from objet.entities.player import Players
 from objet.entities.buttons import Buttons
@@ -31,12 +30,14 @@ LOGGER = logging.getLogger(__name__)
 @dataclass
 class Etat:
     """Stocke l'état courant de la table et calcule les décisions."""
-    cards : CardsState = field(default_factory=CardsState)
-    players : Players = field(default_factory=Players)
-    cards_change : int = 0
-    chance_win_0 : float = None
-    montant_a_jouer : float = None
-    
+    cards: CardsState = field(default_factory=CardsState)
+    players: Players = field(default_factory=Players)
+    cards_change: int = 0
+    chance_win_0: Optional[float] = None
+    chance_win: Optional[float] = None
+    pot: Optional[float] = None
+    montant_a_jouer: Optional[float] = None
+
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
         self.cards = CardsState()
@@ -45,9 +46,14 @@ class Etat:
     
     
     
+    def _require_poker_card(self, card: Card, context: str):
+        poker_card = card.poker_card
+        if poker_card is None:
+            raise ValueError(f"Carte manquante ou invalide pour {context}.")
+        return poker_card
+
     def _cal_win_chances(self) -> float:
         """Calcule les chances de gain en fonction des cartes connues."""
-
 
         me_cards = self.cards.me_cards()
         if len(me_cards) != 2:
@@ -58,7 +64,7 @@ class Etat:
             for idx, card in enumerate(me_cards)
         ]
 
-        board_cards = [card for card in cards_state.board_cards() if card.formatted]
+        board_cards = [card for card in self.cards.board_cards() if card.formatted]
         board_length = len(board_cards)
         if board_length not in (0, 3, 4, 5):
             raise ValueError("Le nombre de cartes sur le board est incorrect.")
@@ -67,16 +73,9 @@ class Etat:
             self._require_poker_card(card, f"board card {idx + 1}")
             for idx, card in enumerate(board_cards)
         ]
-        try:
-            chance_win_0 = HandEvaluator.evaluate_hand(hero_cards, board_poker_cards)
-        except Exception:
-            logger.exception(
-                "Erreur HandEvaluator.evaluate_hand : hero=%r board=%r",
-                hero_cards,
-                board_poker_cards,
-            )
-            return 0
+        chance_win_0 = HandEvaluator.evaluate_hand(hero_cards, board_poker_cards)
         self.chance_win_0 = chance_win_0
+        self.chance_win = chance_win_0
         return chance_win_0
  
 
@@ -85,18 +84,29 @@ class Etat:
 
 
 
-    def _calcul_montant_a_jouer(self)->float:
-        self.montant_a_jouer = self.chance_win*(self.pot)/ (1-(self.chance_win*(self.nbr_palyer_start +1 )))
+    def _calcul_montant_a_jouer(self) -> float:
+        if self.chance_win is None:
+            raise ValueError("Impossible de calculer le montant : chance_win manquant.")
+        if self.pot is None:
+            raise ValueError("Impossible de calculer le montant : pot manquant.")
+        if self.players.nbr_player_start <= 0:
+            raise ValueError("Impossible de calculer le montant : nombre de joueurs invalide.")
+
+        denominateur = 1 - (self.chance_win * (self.players.nbr_player_start + 1))
+        if denominateur == 0:
+            raise ValueError("Division par zéro lors du calcul du montant à jouer.")
+        self.montant_a_jouer = (self.chance_win * self.pot) / denominateur
+        return self.montant_a_jouer
     
-    def update_players(self,players : Players)->None:
-        self.players = players # TODO a ameliorer 
+    def update_players(self, players: Players) -> None:
+        self.players = players
         self.players.cal_nbr_player_start()
         self.players.cal_nbr_player_active()
-    
-    
+
+
     def update_cards_state(self, cards_state: CardsState) -> None:
         """Met à jour l'état des cartes."""
-        nbr_scan = 3 *2 
+        nbr_scan = 3 *2
         for i,card in enumerate(cards_state.board):
             if self.cards.board[i].formatted is None:
                 self.cards.board[i] = card
@@ -120,10 +130,11 @@ class Etat:
                         self.cards.me[i] = card
                         self.cards_change = 0
         self.cards_change -=1
-        
-    def update(self,*,cards_state: CardsState, players : Players) -> None:
+
+    def update(self, *, cards_state: CardsState, players: Players, pot: Optional[float]) -> None:
         self.update_cards_state(cards_state)
         self.update_players(players)
+        self.pot = pot
         self._cal_win_chances()
         self._calcul_montant_a_jouer()
 
@@ -133,7 +144,6 @@ class Game:
 
     etat: Etat = field(default_factory=Etat)
     table: Table = field(default_factory=Table)
-    metrics: Optional[MetricsState] = None
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
     workflow: Optional[str] = None
     _last_pot_amount: Optional[float] = field(default=None, init=False, repr=False)
@@ -176,9 +186,11 @@ class Game:
         """
 
         party_state = self._detect_new_party()
-        self.etat.update(cards_state = self.table.cards, players = self.table.players)
-        self.metrics.update(self.etat)
-        self._calcul_chance_win()
+        self.etat.update(
+            cards_state=self.table.cards,
+            players=self.table.players,
+            pot=self.table.pot.amount,
+        )
         return party_state
 
 
@@ -188,14 +200,7 @@ class Game:
 
     # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
-        if self.metrics is None:
-            raise ValueError("Les métriques de décision sont indisponibles.")
-
-        
-        return self.table.suggest_action(
-            chance_win_x=self.metrics.chance_win_x,
-            ev_calculator=self._calcule_ev,
-        )
+        raise ValueError("Aucune logique de décision directe dans Game.decision.")
 
     # ---- Calculs internes --------------------------------------------
     def _detect_new_party(self) -> Optional[bool]:
@@ -227,7 +232,6 @@ class Game:
         self.table.New_Party()
         self.etat.cards.reset()
         self.etat.players.reset()
-        self.metrics = None
         self._pending_new_party_cleanup = False
         self._new_party_flag = False
 
@@ -295,6 +299,5 @@ __all__ = [
     "CardObservation",
     "CardsState",
     "Buttons",
-    "MetricsState",
     "CaptureState",
 ]

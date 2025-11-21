@@ -1,19 +1,20 @@
 """Entités décrivant les joueurs présents à la table."""
 from __future__ import annotations
 
-from dataclasses import dataclass,field,fields  
-from typing import Optional
+from dataclasses import dataclass, field, fields
 from pathlib import Path
+from typing import Iterator, Optional
+
 import sys
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-    
+
 from objet.utils.calibration import bbox_from_region, load_coordinates
-    
-list_etat = ["No_start", "fold", "play","paid"]
+
+list_etat = ["No_start", "fold", "play", "paid"]
 DEFAULT_COORD_PATH = Path("config/PMU/coordinates.json")
 
 @dataclass

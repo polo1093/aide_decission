@@ -43,10 +43,7 @@ class Controller:
             str: Une chaîne de caractères contenant les informations formatées.
         """
         # Récupération des informations de base
-        metrics = self.game.metrics
-        if metrics is None:
-            raise ValueError("Les métriques ne sont pas disponibles après le scan.")
-
+        
         # Fonction pour arrondir à 4 chiffres significatifs
         def round_sig(x, sig=4):
             if isinstance(x, (int, float)):
@@ -57,8 +54,8 @@ class Controller:
         # Arrondi des valeurs numériques
         pot = round_sig(self.game.etat.pot)
 
-        chance_win_0 = round_sig(self.game.etat.chance_win_0) 
-        montant_a_jouer = round_sig(self.game.etat.montant_a_jouer) 
+        chance_win_0 = round_sig(self.game.etat.chance_win_0)
+        montant_a_jouer = round_sig(self.game.etat.montant_a_jouer)
         decision_result = self.decision.decide(self.game)
         decision_line = f"Action: {decision_result.action} (raison: {decision_result.reason})"
         if decision_result.raise_amount is not None:
@@ -113,7 +110,7 @@ class Controller:
         metrics_lines = [
             f"Pot: {pot}",
             f"Chance win (1): {chance_win_0}",
-            f"Chance win (table): {chance_win_x}",
+            f"Montant a jouer: {montant_a_jouer}",
         ]
         metrics_str = " | ".join(metrics_lines)
 
