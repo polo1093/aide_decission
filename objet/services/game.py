@@ -200,7 +200,7 @@ class Game:
     def new_party_detected(self) -> bool:
         return self._new_party_flag
 
-    def _calcul_chance_win(self) -> None:
+    
     def _calcul_chance_win(self) -> None:
         if self.metrics is None:
             raise ValueError("Les métriques doivent être initialisées avant de calculer les chances.")

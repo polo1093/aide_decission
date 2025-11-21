@@ -223,7 +223,7 @@ def parse_args(argv=None):
     ap.add_argument(
         "--interval",
         type=int,
-        default=250,
+        default=1000,
         help="Intervalle entre deux appels à main() en ms (25..2000)",
     )
     return ap.parse_args(argv)

@@ -134,7 +134,6 @@ class Controller:
             f"Mes cartes: {etat_me_cards_str}\n"
             f"Cartes sur le board: {etat_board_cards_str}\n"
             f"{etat_nbr_player}\n"
-            (f"{new_party_notice}\n" if new_party_notice else "")
             f"{'=' * 30}Métriques{'=' * 30}\n"
             f"Métriques -> {metrics_str}\n"
             f"Decision -> {decision_line}\n"
