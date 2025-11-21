@@ -5,9 +5,6 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from pokereval.card import Card as PokerCard
-from pokereval.hand_evaluator import HandEvaluator
-
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -31,13 +28,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
-class etat:
+class Etat:
     """Stocke l'état courant de la table et calcule les décisions."""
     cards : CardsState = field(default_factory=CardsState)
     players : Players = field(default_factory=Players)
     cards_change : int = 0
-
-    
+    chance_win_0 : float = None
+    montant_a_jouer : float = None
     
     def __post_init__(self) -> None:
         """Garantit que les états dépendants existent."""
@@ -47,7 +44,48 @@ class etat:
     
     
     
-    
+    def _cal_win_chances(self) -> float:
+        """Calcule les chances de gain en fonction des cartes connues."""
+
+
+        me_cards = self.cards.me_cards()
+        if len(me_cards) != 2:
+            raise ValueError("Les cartes du joueur ne sont pas completes ou invalides.")
+
+        hero_cards = [
+            self._require_poker_card(card, f"main heros {idx + 1}")
+            for idx, card in enumerate(me_cards)
+        ]
+
+        board_cards = [card for card in cards_state.board_cards() if card.formatted]
+        board_length = len(board_cards)
+        if board_length not in (0, 3, 4, 5):
+            raise ValueError("Le nombre de cartes sur le board est incorrect.")
+
+        board_poker_cards = [
+            self._require_poker_card(card, f"board card {idx + 1}")
+            for idx, card in enumerate(board_cards)
+        ]
+        try:
+            chance_win_0 = HandEvaluator.evaluate_hand(hero_cards, board_poker_cards)
+        except Exception:
+            logger.exception(
+                "Erreur HandEvaluator.evaluate_hand : hero=%r board=%r",
+                hero_cards,
+                board_poker_cards,
+            )
+            return 0
+        self.chance_win_0
+        return chance_win_0
+ 
+
+  
+  
+
+
+
+    def _calcul_montant_a_jouer(self)->float:
+        self.montant_a_jouer = self.chance_win*(self.pot)/ (1-(self.chance_win*(self.nbr_palyer_start +1 )))
     
     def update_players(self,players : Players)->None:
         self.players = players # TODO a ameliorer 
@@ -85,12 +123,14 @@ class etat:
     def update(self,*,cards_state: CardsState, players : Players) -> None:
         self.update_cards_state(cards_state)
         self.update_players(players)
+        self._cal_win_chances()
+        self._calcul_montant_a_jouer()
 
 @dataclass
 class Game:
     """Stocke l'état courant de la table et calcule les décisions."""
 
-    etat: etat = field(default_factory=etat)
+    etat: Etat = field(default_factory=Etat)
     table: Table = field(default_factory=Table)
     metrics: Optional[MetricsState] = None
     resultat_calcul: Dict[str, Any] = field(default_factory=dict)
@@ -136,7 +176,7 @@ class Game:
 
         party_state = self._detect_new_party()
         self.etat.update(cards_state = self.table.cards, players = self.table.players)
-        self.metrics = MetricsState.from_game(self)
+        self.metrics.update(self.etat)
         self._calcul_chance_win()
         return party_state
 
@@ -147,16 +187,10 @@ class Game:
 
     # ---- Décision ----------------------------------------------------
     def decision(self) -> Optional[str]:
-        if len(self.table.cards.me_cards()) != 2:
-            return None
-        try:
-            self._calcul_chance_win()
-        except ValueError as exc:  # état incomplet : on journalise et on abandonne
-            LOGGER.warning("Impossible de calculer la décision: %s", exc)
-            return None
         if self.metrics is None:
-            LOGGER.warning("Les métriques de décision sont indisponibles.")
-            return None
+            raise ValueError("Les métriques de décision sont indisponibles.")
+
+        
         return self.table.suggest_action(
             chance_win_x=self.metrics.chance_win_x,
             ev_calculator=self._calcule_ev,
@@ -201,52 +235,8 @@ class Game:
         return self._new_party_flag
 
     
-    def _calcul_chance_win(self) -> None:
-        if self.metrics is None:
-            raise ValueError("Les métriques doivent être initialisées avant de calculer les chances.")
 
-        me_cards = self.table.cards.me_cards()
-        if len(me_cards) != 2:
-            raise ValueError("Les cartes du joueur ne sont pas complètes ou invalides.")
 
-        hero_cards = [
-            self._require_poker_card(card, f"main héros {idx + 1}")
-            for idx, card in enumerate(me_cards)
-        ]
-
-        board_cards = [
-            card for card in self.table.cards.board_cards() if card.formatted
-        ]
-        board_length = len(board_cards)
-        if board_length not in (0, 3, 4, 5):
-            raise ValueError("Le nombre de cartes sur le board est incorrect.")
-
-        board_poker_cards = [
-            self._require_poker_card(card, f"board card {idx + 1}")
-            for idx, card in enumerate(board_cards)
-        ]
-
-        chance_win_0 = HandEvaluator.evaluate_hand(hero_cards, board_poker_cards)
-        players = max(1, int(self.metrics.players_active))
-        chance_win_x = (chance_win_0 or 0) ** players
-
-        self.metrics = self.metrics.with_chances(
-            chance_win_0=chance_win_0,
-            chance_win_x=chance_win_x,
-        )
-
-    @staticmethod
-    def _require_poker_card(card: Card, label: str) -> PokerCard:
-        poker_card = getattr(card, "poker_card", None)
-        if poker_card is None:
-            raise ValueError(f"La carte {label} n'a pas été normalisée pour PokéRival.")
-        return poker_card
-
-    def _calcule_ev(self, chance_win: Optional[float], mise: Optional[float]) -> Optional[float]:
-        if chance_win is None or mise is None or self.metrics is None:
-            return None
-        players = max(1, int(self.metrics.players_active))
-        return chance_win * (self.metrics.pot + (mise * (players + 1))) - (1 - chance_win) * mise
 
 
 

@@ -138,24 +138,6 @@ class ScanTable:
             return None, None, 0.0, 0.0
 
         if is_card_present(image_card_value):
-            
-            
-            
-            # img = image_card_value  # BGR
-
-            # if isinstance(img, np.ndarray):
-            #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            #     Image.fromarray(rgb).show()
-            # elif isinstance(img, Image.Image):
-            #     img.show()
-            # img = image_card_suit  # BGR
-
-            # if isinstance(img, np.ndarray):
-            #     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            #     Image.fromarray(rgb).show()
-            # elif isinstance(img, Image.Image):
-            #     img.show()
-                
                 
         
             carte_value, carte_suit, score_value, score_suit = recognize_number_and_suit(

@@ -52,9 +52,7 @@ class Table:
                 position_suit=card.card_coordinates_suit,
                 template_set=card.template_set
             )
-            # if value is not None or suit is not None:
-            #     if value != card.value and suit != card.suit:
-            #         self.New_Party()
+
             card.apply_observation(
                 value=value,
                 suit=suit,
