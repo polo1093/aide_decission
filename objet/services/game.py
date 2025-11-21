@@ -19,7 +19,8 @@ from objet.entities.buttons import Buttons
 from objet.services.table import Table
 from objet.scanner.cards_recognition import CardObservation
 from objet.utils.capture import CaptureState
-from objet.utils.metrics import MetricsState
+
+from pokereval.hand_evaluator import HandEvaluator
 
 from objet.services.script_state import SCRIPT_STATE_USAGE, StatePortion
 
@@ -75,7 +76,7 @@ class Etat:
                 board_poker_cards,
             )
             return 0
-        self.chance_win_0
+        self.chance_win_0 = chance_win_0
         return chance_win_0
  
 

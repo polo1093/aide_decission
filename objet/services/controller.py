@@ -55,12 +55,10 @@ class Controller:
                 return x
 
         # Arrondi des valeurs numériques
-        pot = round_sig(metrics.pot)
-        hero_stack = round_sig(metrics.hero_stack)
-        hero_delta = round_sig(metrics.hero_stack_delta) if metrics.hero_stack_delta is not None else None
-        chance_win_0 = round_sig(metrics.chance_win_0) if metrics.chance_win_0 is not None else None
-        chance_win_x = round_sig(metrics.chance_win_x) if metrics.chance_win_x is not None else None
+        pot = round_sig(self.game.etat.pot)
 
+        chance_win_0 = round_sig(self.game.etat.chance_win_0) 
+        montant_a_jouer = round_sig(self.game.etat.montant_a_jouer) 
         decision_result = self.decision.decide(self.game)
         decision_line = f"Action: {decision_result.action} (raison: {decision_result.reason})"
         if decision_result.raise_amount is not None:
@@ -114,9 +112,6 @@ class Controller:
 
         metrics_lines = [
             f"Pot: {pot}",
-            f"Hero stack: {hero_stack}",
-            f"Hero delta: {hero_delta}\n",
-            f"Street: {metrics.street}",
             f"Chance win (1): {chance_win_0}",
             f"Chance win (table): {chance_win_x}",
         ]
